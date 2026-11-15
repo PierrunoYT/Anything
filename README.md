@@ -65,13 +65,13 @@ $env:FILECRAFT_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ig
 
 ## Contributing
 
-Changes go through pull requests: create a branch, push it and open a PR against `main`. Every
-PR needs one approving review before it can be merged.
+Changes are committed and pushed straight to `main`, one commit per fix; no pull request or
+review is needed. Force pushes to `main` and deleting it are blocked.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds, lints (`clippy -D warnings`)
 and tests on Windows in both the debug and release profiles and on Linux, and checks dependencies with
 `cargo deny check` (policy in [`deny.toml`](deny.toml)) and `cargo audit`. It also runs weekly, so
-new advisories show up between pull requests. Third-party actions are pinned to commit SHAs, and
+new advisories show up between pushes. Third-party actions are pinned to commit SHAs, and
 both they and the crates in `Cargo.lock` are kept current by Dependabot. Run the same checks
 locally before pushing:
 

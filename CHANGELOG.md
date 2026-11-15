@@ -51,6 +51,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Changes are pushed straight to `main` instead of going through pull requests. The branch rule
+  that required a pull request is removed (force pushes and deleting `main` stay blocked), and
+  `AGENTS.md` and the README's Contributing section say so.
 - README: removed the Freewright and Discord links.
 - With quick search on (the default), closing the window no longer exits FileCraft: it keeps
   running in the notification area so that the hotkey keeps working. **Exit** (in the File menu or

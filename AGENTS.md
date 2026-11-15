@@ -13,12 +13,13 @@ Guidance for AI coding agents (Claude Code and others) working in this repositor
 
 ## One commit per fix
 
-- Each fix gets its own commit (and its own branch and pull request). Don't bundle unrelated
-  fixes, and don't spread one fix across several commits.
+- Each fix gets its own commit. Don't bundle unrelated fixes, and don't spread one fix across
+  several commits.
 - Use Conventional Commit messages (`fix:`, `feat:`, `docs:`, `chore:` …). Explain the cause and
   the fix in the body, and close the issue with `Fixes #N`.
 - The commit includes everything for that fix: code, tests and documentation.
-- `main` only takes reviewed pull requests. Push a branch and open a PR; never push to `main`.
+- Commit and push straight to `main`; no branch or pull request is needed. Never force-push
+  `main` or rewrite its history.
 
 ## Update the docs with every change
 
