@@ -13,6 +13,7 @@ mod quick_bar;
 mod search;
 mod util;
 mod walk;
+mod watch;
 
 use eframe::egui;
 

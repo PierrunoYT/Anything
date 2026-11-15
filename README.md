@@ -13,6 +13,8 @@ fixed drives and filters millions of entries as you type.
   drive's master file table directly, which indexes a drive in seconds; the window itself never
   needs administrator rights. Otherwise it uses a parallel folder scan.
 - **Instant startup**: indexes are cached on disk and refreshed in the background.
+- **Live updates**: new, changed, renamed and deleted files show up within a second or two while
+  FileCraft runs, without administrator rights.
 - **Everything-style queries**: `ext:pdf`, `size:>100mb`, `dm:today`, `folder:src`, wildcards,
   `!not`, `a|b`, path terms and `regex:`.
 - **Preview and edit**: text with an inline editor (Ctrl+S to save; encoding and line endings
