@@ -14,10 +14,18 @@ const QUEUED_BATCHES: usize = 64;
 /// Folders waiting in the shared queue before a worker keeps the ones it finds on its own stack
 /// (walked depth-first), which bounds the shared queue without ever blocking a worker on it.
 const SHARED_QUEUE_LIMIT: usize = 4096;
-/// Kernel and runtime file systems mounted under `/` on Linux. Their entries are processes,
-/// devices and settings rather than files, number in the hundreds of thousands and change all
-/// the time, so these folders are listed but not entered.
-const PSEUDO_FOLDERS: [&str; 4] = ["/proc", "/sys", "/dev", "/run"];
+/// Folders below `/` that are listed but not entered. On Linux these are kernel and runtime file
+/// systems: their entries are processes, devices and settings rather than files, number in the
+/// hundreds of thousands and change all the time. On macOS `/System/Volumes` holds the data
+/// volume, whose folders (`Users`, `Applications`, …) already appear at `/` through firmlinks, so
+/// entering it would list every user file twice; `/dev` holds devices.
+const PSEUDO_FOLDERS: &[&str] = if cfg!(windows) {
+    &[]
+} else if cfg!(target_os = "macos") {
+    &["/System/Volumes", "/dev"]
+} else {
+    &["/proc", "/sys", "/dev", "/run"]
+};
 
 /// State every worker shares.
 struct Shared<'a> {
@@ -165,7 +173,7 @@ fn read_one_dir(
             shared.skipped.fetch_add(1, Ordering::Relaxed);
         }
         let path = entry.path();
-        let pseudo = !cfg!(windows) && PSEUDO_FOLDERS.iter().any(|p| path == Path::new(p));
+        let pseudo = PSEUDO_FOLDERS.iter().any(|p| path == Path::new(p));
         if !lossy && !pseudo && attrs & ATTR_DIRECTORY != 0 && attrs & ATTR_REPARSE_POINT == 0 {
             shared.pending.fetch_add(1, Ordering::AcqRel);
             let job = (path, idx);

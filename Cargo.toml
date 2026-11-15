@@ -19,6 +19,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 memchr = "2.8"
 raw-window-handle = "0.6"
 regex = "1.11"
+
+# The Win32 calls are made on Windows only.
+[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",

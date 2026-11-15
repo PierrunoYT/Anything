@@ -956,7 +956,9 @@ mod tests {
 
     /// Record state that cannot be allocated is an error, so the folder scan runs. It was
     /// allocated infallibly, and up to about 3.7 GB below the record cap, so a machine short of
-    /// memory aborted instead.
+    /// memory aborted instead. Not on macOS: it overcommits, so the reservation succeeds and
+    /// filling it gets the test killed. The reader runs on Windows only, which does not.
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn record_state_that_does_not_fit_is_an_error() {
         assert!(record_state(1 << 40).is_err());

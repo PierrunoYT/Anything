@@ -48,6 +48,12 @@ All notable changes to this project are documented here. The format follows
   (by default `~/.cache/filecraft`). The external editor defaults to `FILECRAFT_EDITOR`, else
   `xdg-open`. Fast NTFS indexing, quick search and Properties are Windows-only and hidden there.
   CI also checks, lints and tests on Linux.
+- macOS support. As on Linux, the one volume is `/`, indexed with the folder scan. The scan does
+  not enter `/System/Volumes`, whose data volume already appears at `/` through firmlinks (it
+  would list every user file twice), or `/dev`. The cache lives in `~/Library/Caches/FileCraft`.
+  Open uses `open`, Show in folder selects the item in the Finder (`open -R`), and the external
+  editor defaults to `FILECRAFT_EDITOR`, else the default text editor (`open -t`). `windows-sys`
+  is now a Windows-only dependency. CI also checks, lints and tests on macOS.
 
 ### Changed
 

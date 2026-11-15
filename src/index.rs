@@ -574,12 +574,18 @@ const MAX_CACHE_ENTRIES: usize = 64 << 20;
 /// Serialized size of one [`Entry`].
 const ENTRY_BYTES: usize = 36;
 
-/// `%LOCALAPPDATA%\FileCraft` on Windows; elsewhere `$XDG_CACHE_HOME/filecraft`, by default
-/// `~/.cache/filecraft`, rather than the shared temporary folder other users can write to.
+/// `%LOCALAPPDATA%\FileCraft` on Windows, `~/Library/Caches/FileCraft` on macOS, elsewhere
+/// `$XDG_CACHE_HOME/filecraft`, by default `~/.cache/filecraft`, rather than the shared temporary
+/// folder other users can write to.
 pub fn data_dir() -> PathBuf {
     #[cfg(windows)]
     let (base, name) = (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "FileCraft");
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let (base, name) = (
+        std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library").join("Caches")),
+        "FileCraft",
+    );
+    #[cfg(not(any(windows, target_os = "macos")))]
     let (base, name) = (
         std::env::var_os("XDG_CACHE_HOME")
             .map(PathBuf::from)

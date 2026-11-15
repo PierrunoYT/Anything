@@ -83,6 +83,10 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   `util::SEP` and `util::volume_name` give paths without a drive prefix, separated by `/`, and
   `valid_name` only rejects `/` and NUL, since `\` and `:` are valid in Linux names. The MFT
   reader, its helper and the hotkey module are built and tested everywhere but only run on Windows.
+- **macOS** — the same single `/` volume as Linux. `walk::PSEUDO_FOLDERS` skips `/System/Volumes`
+  (its `Data` volume is firmlinked to `/Users`, `/Applications` and so on, so walking it would
+  index every user file twice) and `/dev`. `actions` uses `/usr/bin/open` (and `open -R` to reveal),
+  and the cache is under `~/Library/Caches/FileCraft`. `windows-sys` is a Windows-only dependency.
 - **Indexer** (`indexer.rs`) — one thread per drive: load the cache and publish it, then rebuild
   if the cache is missing or too old (MFT for NTFS drives when the helper runs or the window
   itself is elevated, else walk, with walk as the fallback when the MFT read fails or panics),
@@ -108,7 +112,8 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
 ## Cache format
 
 `%LOCALAPPDATA%\FileCraft\index\<letter>.idx` (on Linux `$XDG_CACHE_HOME/filecraft/index/root.idx`,
-by default under `~/.cache`), little-endian: magic and version, drive letter (`/` on Linux),
+by default under `~/.cache`; on macOS `~/Library/Caches/FileCraft/index/root.idx`), little-endian:
+magic and version, drive letter (`/` on Linux and macOS),
 source, build time, both name arenas, the entry table and the four sort orders.
 
 Each save writes and syncs its own staging file, `<letter>.<pid>-<n>.tmp`, created exclusively so

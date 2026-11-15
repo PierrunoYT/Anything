@@ -128,20 +128,28 @@ pub fn open(path: &Path) -> io::Result<()> {
     {
         shell_execute("open", path, 0)
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("/usr/bin/open").arg(path).spawn().map(|_| ())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Command::new("xdg-open").arg(path).spawn().map(|_| ())
     }
 }
 
-/// Opens Explorer with the item selected.
+/// Opens Explorer (on macOS the Finder) with the item selected; elsewhere opens its folder.
 pub fn reveal(path: &Path) -> io::Result<()> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         Command::new(explorer_exe()?).raw_arg(select_arg(path)?).spawn().map(|_| ())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("/usr/bin/open").arg("-R").arg(path).spawn().map(|_| ())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Command::new("xdg-open").arg(path.parent().unwrap_or(path)).spawn().map(|_| ())
     }
@@ -191,12 +199,20 @@ pub fn properties(path: &Path) -> io::Result<()> {
 
 /// The editor command: `FILECRAFT_EDITOR`, `VISUAL`, `EDITOR`, else Notepad. Elsewhere `VISUAL`
 /// and `EDITOR` usually name terminal editors, which show nothing when started from a window, so
-/// the fallback after `FILECRAFT_EDITOR` is the desktop's default application (`xdg-open`).
+/// the fallback after `FILECRAFT_EDITOR` is the default text editor on macOS (`open -t`) and the
+/// desktop's default application (`xdg-open`) elsewhere.
 pub fn default_editor() -> String {
     let vars: &[&str] = if cfg!(windows) { &["FILECRAFT_EDITOR", "VISUAL", "EDITOR"] } else { &["FILECRAFT_EDITOR"] };
+    let fallback = if cfg!(windows) {
+        "notepad"
+    } else if cfg!(target_os = "macos") {
+        "/usr/bin/open -t"
+    } else {
+        "xdg-open"
+    };
     vars.iter()
         .find_map(|k| std::env::var(k).ok().filter(|v| !v.trim().is_empty()))
-        .unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "xdg-open" }.to_string())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// The program `editor` starts. It is resolved once: [`edit_with`] runs exactly this file, so

@@ -1538,11 +1538,13 @@ impl FileCraftApp {
                 ui.strong("Drives");
                 for d in &self.drives {
                     let mut on = !self.excluded.contains(&d.letter);
-                    let label = if d.label.is_empty() {
-                        format!("{}  ({})", volume_name(d.letter), d.filesystem)
-                    } else {
-                        format!("{}  {}  ({})", volume_name(d.letter), d.label, d.filesystem)
-                    };
+                    let mut label = volume_name(d.letter);
+                    if !d.label.is_empty() {
+                        label.push_str(&format!("  {}", d.label));
+                    }
+                    if !d.filesystem.is_empty() {
+                        label.push_str(&format!("  ({})", d.filesystem));
+                    }
                     if ui.checkbox(&mut on, label).changed() {
                         changed_drives.push((d.letter, on));
                     }

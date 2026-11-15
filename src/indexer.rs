@@ -358,6 +358,7 @@ pub fn fixed_drives() -> Vec<Drive> {
 #[cfg(not(windows))]
 pub fn fixed_drives() -> Vec<Drive> {
     // The last `/` line of the mount table is the one in effect, e.g. `/dev/sda2 / ext4 rw 0 0`.
+    // Only Linux has it; elsewhere (macOS) the file system is left unnamed.
     let filesystem = std::fs::read_to_string("/proc/self/mounts")
         .unwrap_or_default()
         .lines()

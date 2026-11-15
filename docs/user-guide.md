@@ -17,6 +17,18 @@ the default external editor use `xdg-open`; set `FILECRAFT_EDITOR` (or the setti
 editor. Fast NTFS indexing, the quick search bar, the notification area icon and Properties exist
 on Windows only and are not shown.
 
+## On macOS
+
+FileCraft runs on macOS too, much as on Linux: the one volume is `/`, indexed with a folder scan,
+and paths use `/`. The scan does not enter `/System/Volumes` (the data volume there already
+appears at `/`, as `/Users`, `/Applications` and so on, so it would list every file twice) or
+`/dev`. The cache is kept in `~/Library/Caches/FileCraft/index`. **Open** uses the default
+application, **Show in folder** selects the item in the Finder, and the default external editor is
+the default text editor (`open -t`) unless `FILECRAFT_EDITOR` (or the setting) names another.
+Folders that macOS privacy protection guards (such as Mail or Messages data) are only indexed when
+FileCraft has Full Disk Access; otherwise they count as items that could not be read. Fast NTFS
+indexing, the quick search bar, the notification area icon and Properties are not shown.
+
 ## Window
 
 - **Search box** — results update on every keystroke. The toggles on the right are

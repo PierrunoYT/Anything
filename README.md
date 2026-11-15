@@ -2,12 +2,12 @@
 
 <h1 align="center">FileCraft</h1>
 
-Instant file search for Windows and Linux: a desktop app in the spirit of
+Instant file search for Windows, Linux and macOS: a desktop app in the spirit of
 [Everything](https://www.voidtools.com/), written in Rust. It indexes every file and folder on your
 fixed drives and filters millions of entries as you type.
 
-On Linux, FileCraft indexes the file system root `/` with the folder scan. Fast NTFS indexing,
-the quick search bar and Properties are Windows-only.
+On Linux and macOS, FileCraft indexes the file system root `/` with the folder scan. Fast NTFS
+indexing, the quick search bar and Properties are Windows-only.
 
 ## Features
 
@@ -52,6 +52,8 @@ cargo build --release
 ./target/release/FileCraft
 ```
 
+On macOS, the same two commands work without extra packages.
+
 ```powershell
 cargo test                                                        # unit tests
 $env:FILECRAFT_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ignored --nocapture
@@ -69,7 +71,7 @@ Changes are committed and pushed straight to `main`, one commit per fix; no pull
 review is needed. Force pushes to `main` and deleting it are blocked.
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds, lints (`clippy -D warnings`)
-and tests on Windows in both the debug and release profiles and on Linux, and checks dependencies with
+and tests on Windows in both the debug and release profiles and on Linux and macOS, and checks dependencies with
 `cargo deny check` (policy in [`deny.toml`](deny.toml)) and `cargo audit`. It also runs weekly, so
 new advisories show up between pushes. Third-party actions are pinned to commit SHAs, and
 both they and the crates in `Cargo.lock` are kept current by Dependabot. Run the same checks
