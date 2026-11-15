@@ -159,13 +159,15 @@ Right-click a result, use the preview pane buttons, or the keyboard:
 | `Ctrl+E` | Open in the external editor |
 | `Ctrl+Shift+C` | Copy the full path |
 | `Ctrl+F` / `Esc` | Focus the search box / clear it |
+| `Tab` | From the search box: move to the results. From the results: back to the search box, with the query selected |
 | `F1` | Search syntax and shortcuts |
 | `F2` | Toggle the preview pane |
 | `F5` | Re-index all drives |
 
 The selection keys, the `Enter` keys, `F4`, `Ctrl+E`, `Ctrl+Shift+C` and `Esc` act on the results
 while the search box or the preview text has focus. In the inline editor and the fields of
-**Settings** they act on the text instead (`Esc` leaves the field).
+**Settings** they act on the text instead (`Esc` leaves the field). `Tab` keeps its usual meaning
+there and in the preview text, moving to the next control.
 
 Windows rewrites some names when a program opens them: a trailing dot or space is dropped, and
 `CON`, `NUL`, `CONIN$`, `COM1`, `COM¹` and similar are devices. FileCraft previews and edits such

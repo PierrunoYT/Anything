@@ -51,6 +51,10 @@ All notable changes to this project are documented here. The format follows
   first close explains this once and offers to exit instead.
 - Dependabot now also proposes weekly updates for the crates in `Cargo.lock`, not only for the
   GitHub Actions. Fixes for crate advisories used to depend on someone running `cargo update`.
+- `Tab` switches between the search box and the results: from the search box it moves to the
+  results (selecting the first one if none is), and from the results it returns to the search box
+  with the query selected, so typing replaces it. It used to walk egui's focus order through the
+  option toggles, column headers and other controls.
 
 ### Fixed
 
