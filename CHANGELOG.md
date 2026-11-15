@@ -54,6 +54,10 @@ All notable changes to this project are documented here. The format follows
 - eframe and egui_extras updated to 0.37 together (the separate Dependabot bumps mixed two egui
   versions and did not compile). Replaced the APIs 0.37 deprecates: `Id::new` → `Id::unique`,
   `TextEdit::vertical_align` → `TextEdit::align`.
+- `Tab` switches between the search box and the results: from the search box it moves to the
+  results (selecting the first one if none is), and from the results it returns to the search box
+  with the query selected, so typing replaces it. It used to walk egui's focus order through the
+  option toggles, column headers and other controls.
 
 ### Fixed
 
