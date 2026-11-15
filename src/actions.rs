@@ -189,12 +189,14 @@ pub fn properties(path: &Path) -> io::Result<()> {
     }
 }
 
-/// The editor command: `FILECRAFT_EDITOR`, `VISUAL`, `EDITOR`, else Notepad.
+/// The editor command: `FILECRAFT_EDITOR`, `VISUAL`, `EDITOR`, else Notepad. Elsewhere `VISUAL`
+/// and `EDITOR` usually name terminal editors, which show nothing when started from a window, so
+/// the fallback after `FILECRAFT_EDITOR` is the desktop's default application (`xdg-open`).
 pub fn default_editor() -> String {
-    ["FILECRAFT_EDITOR", "VISUAL", "EDITOR"]
-        .iter()
+    let vars: &[&str] = if cfg!(windows) { &["FILECRAFT_EDITOR", "VISUAL", "EDITOR"] } else { &["FILECRAFT_EDITOR"] };
+    vars.iter()
         .find_map(|k| std::env::var(k).ok().filter(|v| !v.trim().is_empty()))
-        .unwrap_or_else(|| "notepad".to_string())
+        .unwrap_or_else(|| if cfg!(windows) { "notepad" } else { "xdg-open" }.to_string())
 }
 
 /// The program `editor` starts. It is resolved once: [`edit_with`] runs exactly this file, so

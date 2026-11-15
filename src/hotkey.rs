@@ -5,6 +5,9 @@
 //! straight from this thread, so it appears without waiting for a repaint of the hidden main window;
 //! the bar then takes the foreground, which Windows allows the process that received a hotkey.
 
+// The hotkey and tray icon exist on Windows only; elsewhere this is the parser and a stub.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 

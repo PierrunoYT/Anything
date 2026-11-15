@@ -1,6 +1,7 @@
 //! In-memory file index: one [`VolumeIndex`] per drive, stored as compact arrays so that
 //! millions of entries can be scanned per keystroke.
 
+use crate::util::{SEP, volume_name};
 use std::cmp::Ordering;
 use std::fs;
 use std::io::{self, BufWriter, Read, Write};
@@ -127,13 +128,15 @@ impl VolumeIndex {
             heap.extend(ancestors(&self.entries, cur));
         }
         let chain = if heap.is_empty() { &stack[..depth] } else { &heap[..] };
-        buf.push(if lowercase { self.letter.to_ascii_lowercase() } else { self.letter });
-        buf.push(':');
+        if cfg!(windows) {
+            buf.push(if lowercase { self.letter.to_ascii_lowercase() } else { self.letter });
+            buf.push(':');
+        }
         if chain.is_empty() {
-            buf.push('\\');
+            buf.push(SEP);
         }
         for &id in chain.iter().rev() {
-            buf.push('\\');
+            buf.push(SEP);
             buf.push_str(if lowercase { self.lower_name(id) } else { self.name(id) });
         }
     }
@@ -230,8 +233,7 @@ impl VolumeBuilder {
             arena_limit: u32::MAX as usize,
             full: false,
         };
-        let root = format!("{letter}:");
-        b.push(&root, NONE, ATTR_DIRECTORY, 0, 0);
+        b.push(&volume_name(letter), NONE, ATTR_DIRECTORY, 0, 0);
         b
     }
 
@@ -239,6 +241,8 @@ impl VolumeBuilder {
         self.entries.len()
     }
 
+    /// Only the NTFS reader knows its entry count up front, and it runs on Windows only.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn reserve(&mut self, entries: usize) {
         self.entries.reserve(entries);
         self.names.reserve(entries * 16);
@@ -362,11 +366,13 @@ impl VolumeBuilder {
 }
 
 /// Whether `name` can be one component of a path: not empty, `.` or `..`, and without a separator,
-/// `:` or NUL. The folder scan never lists anything else, and the NTFS reader substitutes such
-/// names. A cache holding one would make a displayed name stand for a different path (FC-17):
-/// `x:y` in a folder names the stream `y` of the sibling file `x`, even through a `\\?\` path.
+/// `:` (on Windows) or NUL. The folder scan never lists anything else, and the NTFS reader
+/// substitutes such names. A cache holding one would make a displayed name stand for a different
+/// path (FC-17): `x:y` in a folder names the stream `y` of the sibling file `x`, even through a
+/// `\\?\` path. Elsewhere `\` and `:` are ordinary characters of file names.
 pub fn valid_name(name: &str) -> bool {
-    !name.is_empty() && name != "." && name != ".." && !name.contains(['\\', '/', ':', '\0'])
+    let forbidden: &[char] = if cfg!(windows) { &['\\', '/', ':', '\0'] } else { &['/', '\0'] };
+    !name.is_empty() && name != "." && name != ".." && !name.contains(forbidden)
 }
 
 /// The `len` bytes at `off` in a name arena, if they lie inside it on character boundaries.
@@ -568,11 +574,20 @@ const MAX_CACHE_ENTRIES: usize = 64 << 20;
 /// Serialized size of one [`Entry`].
 const ENTRY_BYTES: usize = 36;
 
+/// `%LOCALAPPDATA%\FileCraft` on Windows; elsewhere `$XDG_CACHE_HOME/filecraft`, by default
+/// `~/.cache/filecraft`, rather than the shared temporary folder other users can write to.
 pub fn data_dir() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir)
-        .join("FileCraft")
+    #[cfg(windows)]
+    let (base, name) = (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "FileCraft");
+    #[cfg(not(windows))]
+    let (base, name) = (
+        std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache"))),
+        "filecraft",
+    );
+    base.unwrap_or_else(std::env::temp_dir).join(name)
 }
 
 /// Creates `dir` if needed and checks that neither it nor any of its ancestors inside
@@ -613,7 +628,8 @@ fn is_reparse_point(meta: &fs::Metadata) -> bool {
 }
 
 pub fn cache_path(letter: char) -> PathBuf {
-    data_dir().join("index").join(format!("{letter}.idx"))
+    let file = if cfg!(windows) { format!("{letter}.idx") } else { String::from("root.idx") };
+    data_dir().join("index").join(file)
 }
 
 /// Serializes the check-then-rename step of saves in this process.
@@ -996,6 +1012,7 @@ impl<'a> Reader<'a> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::util::native;
 
     /// C:\ with: docs\ (readme.md 100, Notes.TXT 50), src\main.rs 300, big.bin 1000
     pub fn sample() -> VolumeIndex {
@@ -1018,9 +1035,9 @@ pub mod tests {
         let v = sample();
         assert_eq!(v.len(), 6);
         let main = v.by_name.iter().copied().find(|&i| v.name(i) == "main.rs").unwrap();
-        assert_eq!(v.full_path(main), r"C:\src\main.rs");
-        assert_eq!(v.parent_path(main), r"C:\src");
-        assert_eq!(v.full_path(0), r"C:\");
+        assert_eq!(v.full_path(main), native(r"C:\src\main.rs"));
+        assert_eq!(v.parent_path(main), native(r"C:\src"));
+        assert_eq!(v.full_path(0), native(r"C:\"));
 
         let docs = v.by_name.iter().copied().find(|&i| v.name(i) == "docs").unwrap();
         assert_eq!(v.entry(docs).size, 150);
@@ -1049,12 +1066,12 @@ pub mod tests {
     #[test]
     fn name_arena_overflow_is_reported() {
         let mut b = VolumeBuilder::new('C');
-        b.arena_limit = 11; // "C:" (2 bytes) is already stored
+        b.arena_limit = b.names.len() + 9; // the root's name is already stored
         b.push("abcde", 0, 0, 1, 0);
         assert!(b.check_capacity().is_ok());
         b.push("fghij", 0, 0, 1, 0);
         assert!(b.check_capacity().is_err());
-        assert!(b.names.len() <= 11 && b.lower.len() <= 11);
+        assert!(b.names.len() <= b.arena_limit && b.lower.len() <= b.arena_limit);
     }
 
     /// FC-12: folder sizes and path ranks used to cost O(depth) per entry (quadratic on a deep
@@ -1125,7 +1142,7 @@ pub mod tests {
         assert_eq!(loaded.letter, 'C');
         assert_eq!(names(&loaded, &loaded.by_path), names(&v, &v.by_path));
         let main = loaded.by_name[2];
-        assert_eq!(loaded.full_path(main), r"C:\src\main.rs");
+        assert_eq!(loaded.full_path(main), native(r"C:\src\main.rs"));
         assert_eq!(loaded.entry(main).size, 300);
     }
 
@@ -1180,28 +1197,26 @@ pub mod tests {
     /// component made a displayed name stand for a different file. Such caches are rejected.
     #[test]
     fn caches_with_path_like_names_are_rejected() {
-        for (label, bad) in [
-            ("traversal", r"..\..\Windows\win.ini"),
-            ("dotdot", ".."),
-            ("dot", "."),
-            ("empty", ""),
-            ("slash", "a/b"),
-            ("nul", "a\0b"),
-            ("stream", "notes.txt:payload"),
-        ] {
+        let mut bad_names = vec![("dotdot", ".."), ("dot", "."), ("empty", ""), ("slash", "a/b"), ("nul", "a\0b")];
+        // Elsewhere `\` and `:` are ordinary characters of file names.
+        if cfg!(windows) {
+            bad_names.extend([("traversal", r"..\..\Windows\win.ini"), ("stream", "notes.txt:payload")]);
+        }
+        for (label, bad) in bad_names {
             let mut b = VolumeBuilder::new('C');
             let dir = b.push("Public", 0, ATTR_DIRECTORY, 0, 0);
             b.push(bad, dir, 0, 1, 0);
             load_error(&format!("name-{label}"), &cache_bytes(&b.finish(Source::Walk, Duration::ZERO)), 'C');
         }
-        // The lowercased copy is checked too: `ab` whose lowercase name was rewritten to `a\`.
+        // The lowercased copy is checked too: `ab` whose lowercase name was rewritten to `a/`.
         let mut b = VolumeBuilder::new('C');
         b.push("ab", 0, 0, 1, 0);
         let v = b.finish(Source::Walk, Duration::ZERO);
-        let lower_at = 8 + 4 + 1 + 8 + 8 + (8 + v.names.len()) + 8;
+        // The lower arena holds the root's name (`c:`, or `/`), then `ab`.
+        let ab_at = 8 + 4 + 1 + 8 + 8 + (8 + v.names.len()) + 8 + v.lower.len() - 2;
         let mut bytes = cache_bytes(&v);
-        assert_eq!(&bytes[lower_at..lower_at + 4], b"c:ab");
-        bytes[lower_at + 3] = b'\\';
+        assert_eq!(&bytes[ab_at..ab_at + 2], b"ab");
+        bytes[ab_at + 1] = b'/';
         load_error("lower-name", &bytes, 'C');
         // Names that are odd but valid on NTFS still load. The folder scan stores a name that is
         // not a path component as `?`, so its caches load too.
@@ -1214,7 +1229,8 @@ pub mod tests {
         v.save(&path).unwrap();
         let loaded = VolumeIndex::load(&path, 'C').unwrap();
         assert_eq!(loaded.len(), 3);
-        assert_eq!(loaded.name(3), "?");
+        // On Windows `x:y` names a stream; elsewhere a name such as `10:30 notes` is kept as is.
+        assert_eq!(loaded.name(3), if cfg!(windows) { "?" } else { "notes.txt:payload" });
         fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
@@ -1310,9 +1326,9 @@ pub mod tests {
         let file = b.push("victim.txt", parent, 0, 7, 0);
         let v = b.finish(Source::Walk, Duration::ZERO);
 
-        let expected = format!(r"C:{}\victim.txt", r"\d".repeat(513));
+        let expected = native(&format!(r"C:{}\victim.txt", r"\d".repeat(513)));
         assert_eq!(v.full_path(file), expected);
-        assert_eq!(v.parent_path(file), format!("C:{}", r"\d".repeat(513)));
+        assert_eq!(v.parent_path(file), native(&format!("C:{}", r"\d".repeat(513))));
         assert_eq!(v.entry(0).size, 7, "folder sizes reach the root");
         assert_eq!(v.by_path, (1..=file).collect::<Vec<_>>());
 

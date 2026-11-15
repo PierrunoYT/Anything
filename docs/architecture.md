@@ -77,6 +77,12 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   deadlock. When the shared queue holds 4,096 folders, a worker keeps the folders it finds on its
   own stack and walks them depth-first. Cancellation is checked between entries, not only
   between folders.
+- **Linux** — `fixed_drives` returns one volume, the file system root, with the id `/` in place
+  of a drive letter. It is always walked from `/`; `/proc`, `/sys`, `/dev` and `/run` are listed
+  but not entered, and symbolic links are not followed (their metadata is not followed either).
+  `util::SEP` and `util::volume_name` give paths without a drive prefix, separated by `/`, and
+  `valid_name` only rejects `/` and NUL, since `\` and `:` are valid in Linux names. The MFT
+  reader, its helper and the hotkey module are built and tested everywhere but only run on Windows.
 - **Indexer** (`indexer.rs`) — one thread per drive: load the cache and publish it, then rebuild
   if the cache is missing or too old (MFT for NTFS drives when the helper runs or the window
   itself is elevated, else walk, with walk as the fallback when the MFT read fails or panics),
@@ -101,7 +107,8 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
 
 ## Cache format
 
-`%LOCALAPPDATA%\FileCraft\index\<letter>.idx`, little-endian: magic and version, drive letter,
+`%LOCALAPPDATA%\FileCraft\index\<letter>.idx` (on Linux `$XDG_CACHE_HOME/filecraft/index/root.idx`,
+by default under `~/.cache`), little-endian: magic and version, drive letter (`/` on Linux),
 source, build time, both name arenas, the entry table and the four sort orders.
 
 Each save writes and syncs its own staging file, `<letter>.<pid>-<n>.tmp`, created exclusively so

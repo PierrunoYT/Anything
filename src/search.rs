@@ -16,7 +16,9 @@
 //! - `path:foo`        force a term to match the full path
 
 use crate::index::{Index, SortKey, VolumeIndex, thread_count};
-use crate::util::{TICKS_PER_SEC, add_days, local_midnight, local_midnight_today, local_today, now_filetime, parse_date};
+use crate::util::{
+    SEP, TICKS_PER_SEC, add_days, local_midnight, local_midnight_today, local_today, native_separators, now_filetime, parse_date,
+};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use globset::{GlobBuilder, GlobMatcher};
 use memchr::memmem;
@@ -156,8 +158,8 @@ impl Query {
                 .split_once(':')
                 .is_some_and(|(p, _)| FUNCTION_PREFIXES.contains(&p.to_ascii_lowercase().as_str()));
             let alts = if quoted && !function_prefix {
-                // As for unquoted text, a `/` stands for `\` and makes the term a path term.
-                vec![text_test(&body.replace('/', "\\"), opts.match_path, case)]
+                // As for unquoted text, a `/` stands for `\` (on Windows) and makes the term a path term.
+                vec![text_test(&native_separators(&body), opts.match_path, case)]
             } else {
                 parse_term(&body, opts, case)?
             };
@@ -256,8 +258,8 @@ fn parse_term(term: &str, opts: SearchOptions, case: bool) -> Result<Vec<Test>, 
 }
 
 fn plain_test(text: &str, path: bool, case: bool) -> Result<Test, String> {
-    let normalized = text.replace('/', "\\");
-    let path = path || normalized.contains('\\');
+    let normalized = native_separators(text);
+    let path = path || normalized.contains(SEP);
     if normalized.contains(['*', '?']) {
         let glob = GlobBuilder::new(&normalized)
             .case_insensitive(!case)
@@ -273,7 +275,7 @@ fn plain_test(text: &str, path: bool, case: bool) -> Result<Test, String> {
 
 fn text_test(text: &str, path: bool, case: bool) -> Test {
     let needle = if case { text.to_string() } else { text.to_lowercase() };
-    let path = path || needle.contains('\\');
+    let path = path || needle.contains(SEP);
     Test::Text { finder: memmem::Finder::new(needle.as_bytes()).into_owned(), path }
 }
 
@@ -402,7 +404,7 @@ impl Scratch {
                 v.write_path(0, path, lowercase);
             } else {
                 path.push_str(chains[lowercase as usize].folder_path(v, v.entry(idx).parent, lowercase));
-                path.push('\\');
+                path.push(SEP);
                 path.push_str(if lowercase { v.lower_name(idx) } else { v.name(idx) });
             }
             *path_for = Some((idx, lowercase));
@@ -421,14 +423,17 @@ struct DirChain {
     ids: Vec<u32>,
     ends: Vec<usize>,
     position: HashMap<u32, usize>,
-    /// `x:` followed by `\name` for each folder in `ids`.
+    /// `x:` (on Windows) followed by `\name` for each folder in `ids`.
     path: String,
     walked: Vec<u32>,
 }
 
+/// Length of the volume prefix of a path: `x:` on Windows, nothing elsewhere.
+const PREFIX_LEN: usize = if cfg!(windows) { 2 } else { 0 };
+
 impl DirChain {
     fn folder_path<'a>(&'a mut self, v: &VolumeIndex, dir: u32, lowercase: bool) -> &'a str {
-        if self.path.is_empty() {
+        if cfg!(windows) && self.path.is_empty() {
             self.path.push(if lowercase { v.letter.to_ascii_lowercase() } else { v.letter });
             self.path.push(':');
         }
@@ -449,9 +454,9 @@ impl DirChain {
             self.position.remove(&id);
         }
         self.ends.truncate(keep);
-        self.path.truncate(self.ends.last().copied().unwrap_or(2));
+        self.path.truncate(self.ends.last().copied().unwrap_or(PREFIX_LEN));
         for &id in self.walked.iter().rev() {
-            self.path.push('\\');
+            self.path.push(SEP);
             self.path.push_str(if lowercase { v.lower_name(id) } else { v.name(id) });
             self.position.insert(id, self.ids.len());
             self.ids.push(id);
@@ -884,6 +889,7 @@ mod tests {
     use super::*;
     use crate::index::tests::sample;
     use crate::index::{ATTR_DIRECTORY, Source, VolumeBuilder};
+    use crate::util::native;
 
     #[test]
     fn a_ranker_runs_on_the_search_thread() {
@@ -992,8 +998,8 @@ mod tests {
             index = index.with_volume(Arc::new(b.finish(Source::Walk, Duration::ZERO)));
         }
         assert!(index.volumes.iter().map(|v| v.len()).sum::<usize>() >= PARALLEL_MIN);
-        for text in ["1", "!7 ext:rs", "\\d12", "path:3\\f"] {
-            let q = Query::parse(text, SearchOptions::default()).unwrap();
+        for text in ["1", "!7 ext:rs", "\\d12", "path:3\\f"].map(native) {
+            let q = Query::parse(&text, SearchOptions::default()).unwrap();
             for key in [SortKey::Name, SortKey::Path, SortKey::Size, SortKey::Modified] {
                 let expected: Vec<Vec<u32>> = index
                     .volumes
@@ -1077,7 +1083,7 @@ mod tests {
         assert_eq!(names("!folder:\"o\""), names("!folder:o"));
         assert_eq!(names("!\"m\" file:"), names("!m file:"));
         assert_eq!(names("ext:\"md\""), ["readme.md"]);
-        assert_eq!(names("path:\"docs\\\""), ["Notes.TXT", "readme.md"]);
+        assert_eq!(names(&native("path:\"docs\\\"")), ["Notes.TXT", "readme.md"]);
         // Quoted, the same characters are text: no negation, no prefix, no wildcard.
         assert_eq!(names("\"!me\""), Vec::<String>::new());
         assert_eq!(names("\"folder:oc\""), Vec::<String>::new());
@@ -1089,8 +1095,8 @@ mod tests {
     #[test]
     fn quoted_terms_match_paths_with_slashes() {
         assert_eq!(names("\"src/main\""), ["main.rs"]);
-        assert_eq!(names("\"c:/src/\""), names("c:/src/"));
-        assert_eq!(names("!\"docs/\""), names("!docs\\"));
+        assert_eq!(names(&format!("\"{}\"", native("c:/src/"))), names(&native("c:/src/")));
+        assert_eq!(names("!\"docs/\""), names(&native("!docs\\")));
     }
 
     #[test]
@@ -1104,8 +1110,8 @@ mod tests {
     fn wildcards_paths_and_prefixes() {
         assert_eq!(names("*.rs"), ["main.rs"]);
         assert_eq!(names("*.r"), Vec::<String>::new());
-        assert_eq!(names("docs\\"), ["Notes.TXT", "readme.md"]);
-        assert_eq!(names("c:/src/"), ["main.rs"]);
+        assert_eq!(names(&native("docs\\")), ["Notes.TXT", "readme.md"]);
+        assert_eq!(names(&native("c:/src/")), ["main.rs"]);
         assert_eq!(names("ext:md;txt"), ["Notes.TXT", "readme.md"]);
         assert_eq!(names("folder:"), ["docs", "src"]);
         assert_eq!(names("file: m"), ["main.rs", "readme.md"]);

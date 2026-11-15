@@ -4,6 +4,33 @@ pub const TICKS_PER_SEC: i64 = 10_000_000;
 pub const TICKS_PER_DAY: i64 = 86_400 * TICKS_PER_SEC;
 const UNIX_EPOCH_TICKS: i64 = 116_444_736_000_000_000;
 
+/// Separates the components of indexed paths: `\` on Windows, `/` elsewhere.
+pub const SEP: char = if cfg!(windows) { '\\' } else { '/' };
+
+/// The name a volume is shown by. Windows has one volume per drive letter (`C:`); other systems
+/// have a single volume, the file system root `/`, whose paths have no prefix.
+pub fn volume_name(letter: char) -> String {
+    if cfg!(windows) { format!("{letter}:") } else { String::from("/") }
+}
+
+/// Query text with the separators of indexed paths: on Windows `/` is read as `\`. Elsewhere `\`
+/// is an ordinary character of file names, so the text is unchanged.
+pub fn native_separators(text: &str) -> String {
+    if cfg!(windows) { text.replace('/', "\\") } else { text.to_string() }
+}
+
+/// Test helper: a Windows path such as `C:\src\main.rs` (or a query such as `c:/src/`) as this
+/// platform writes it, so tests built on drive-letter fixtures check every platform.
+#[cfg(test)]
+pub fn native(path: &str) -> String {
+    if cfg!(windows) {
+        return path.to_string();
+    }
+    let b = path.as_bytes();
+    let rest = if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' { &path[2..] } else { path };
+    rest.replace('\\', "/")
+}
+
 pub fn now_filetime() -> i64 {
     let since_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

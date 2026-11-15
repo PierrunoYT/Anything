@@ -41,6 +41,13 @@ All notable changes to this project are documented here. The format follows
   result, Ctrl+Enter shows it in its folder, Shift+Enter shows all results in the main window.
 - Notification area icon while quick search is on: clicking it shows the window, and its menu
   offers Open FileCraft, Quick search and Exit. Starting FileCraft again shows the running instance.
+- Linux support. FileCraft used to find no drives on Linux, so nothing was indexed and every search
+  came back empty. It now indexes the file system root `/` with the folder scan, including the
+  file systems mounted below it but not `/proc`, `/sys`, `/dev` and `/run`. Paths use `/`, and
+  `\` and `:` are ordinary characters of names. The cache lives in `$XDG_CACHE_HOME/filecraft`
+  (by default `~/.cache/filecraft`). The external editor defaults to `FILECRAFT_EDITOR`, else
+  `xdg-open`. Fast NTFS indexing, quick search and Properties are Windows-only and hidden there.
+  CI also checks, lints and tests on Linux.
 
 ### Changed
 

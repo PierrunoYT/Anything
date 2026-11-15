@@ -14,6 +14,10 @@ const QUEUED_BATCHES: usize = 64;
 /// Folders waiting in the shared queue before a worker keeps the ones it finds on its own stack
 /// (walked depth-first), which bounds the shared queue without ever blocking a worker on it.
 const SHARED_QUEUE_LIMIT: usize = 4096;
+/// Kernel and runtime file systems mounted under `/` on Linux. Their entries are processes,
+/// devices and settings rather than files, number in the hundreds of thousands and change all
+/// the time, so these folders are listed but not entered.
+const PSEUDO_FOLDERS: [&str; 4] = ["/proc", "/sys", "/dev", "/run"];
 
 /// State every worker shares.
 struct Shared<'a> {
@@ -160,9 +164,11 @@ fn read_one_dir(
         if lossy {
             shared.skipped.fetch_add(1, Ordering::Relaxed);
         }
-        if !lossy && attrs & ATTR_DIRECTORY != 0 && attrs & ATTR_REPARSE_POINT == 0 {
+        let path = entry.path();
+        let pseudo = !cfg!(windows) && PSEUDO_FOLDERS.iter().any(|p| path == Path::new(p));
+        if !lossy && !pseudo && attrs & ATTR_DIRECTORY != 0 && attrs & ATTR_REPARSE_POINT == 0 {
             shared.pending.fetch_add(1, Ordering::AcqRel);
-            let job = (entry.path(), idx);
+            let job = (path, idx);
             if work_tx.len() < SHARED_QUEUE_LIMIT {
                 let _ = work_tx.send(job);
             } else {
@@ -236,7 +242,7 @@ mod tests {
         assert_eq!(v.len(), 4);
         assert_eq!(skipped.load(Ordering::Relaxed), 0);
         let two = v.by_name.iter().copied().find(|&i| v.name(i) == "two.rs").unwrap();
-        assert_eq!(v.full_path(two), r"T:\a\b\two.rs");
+        assert_eq!(v.full_path(two), crate::util::native(r"T:\a\b\two.rs"));
         let a = v.by_name.iter().copied().find(|&i| v.name(i) == "a").unwrap();
         assert_eq!(v.entry(a).size, 17);
     }

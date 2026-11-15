@@ -1,6 +1,9 @@
 //! Fast indexer: reads the NTFS master file table straight from the volume, the same technique
 //! Everything uses. Opening `\\.\C:` for reading requires administrator rights.
 
+// Volumes are read on Windows only; elsewhere the parser is built and tested but never run.
+#![cfg_attr(not(windows), allow(dead_code))]
+
 use crate::index::{ATTR_DIRECTORY, NONE, Source, VolumeBuilder, VolumeIndex, valid_name};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
@@ -685,6 +688,7 @@ fn build(letter: char, recs: &[Rec], names: &str, links: &[Link], start: Instant
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::native;
 
     const RECORD: usize = 1024;
 
@@ -1003,7 +1007,7 @@ mod tests {
         let v = build('C', &recs, &names, &links, Instant::now()).unwrap();
         let mut paths: Vec<String> = v.by_name.iter().map(|&i| v.full_path(i)).collect();
         paths.sort();
-        assert_eq!(paths, [r"C:\Users", r"C:\Users\a.txt", r"C:\b link.txt"]);
+        assert_eq!(paths, [r"C:\Users", r"C:\Users\a.txt", r"C:\b link.txt"].map(native));
     }
 
     /// A parent reference carries the parent record's sequence number. When a folder is deleted
@@ -1030,7 +1034,7 @@ mod tests {
         let v = build('C', &recs, &names, &links, Instant::now()).unwrap();
         let mut paths: Vec<String> = v.by_name.iter().map(|&i| v.full_path(i)).collect();
         paths.sort();
-        assert_eq!(paths, [r"C:\New", r"C:\New\new child.txt"]);
+        assert_eq!(paths, [r"C:\New", r"C:\New\new child.txt"].map(native));
     }
 
     /// A torn read of the root record (5) leaves it unparsed with sequence number 0, so no child
@@ -1082,7 +1086,7 @@ mod tests {
         let v = build('C', &recs, &names, &links, Instant::now()).unwrap();
         assert_eq!(v.len(), 2);
         let report = v.by_name.iter().copied().find(|&i| v.name(i) == "Report final.docx").unwrap();
-        assert_eq!(v.full_path(report), r"C:\Users\Report final.docx");
+        assert_eq!(v.full_path(report), native(r"C:\Users\Report final.docx"));
         assert_eq!(v.entry(report).size, 12345);
         assert_eq!(v.entry(report).mtime, 3);
         let users = v.entry(v.entry(report).parent);

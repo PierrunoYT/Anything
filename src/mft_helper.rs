@@ -15,6 +15,9 @@
 //! of `P` + progress (u64) + total (u64), then `D` + length (u64) + index, or `E` + length (u32)
 //! + UTF-8 message.
 
+// The helper runs on Windows only; elsewhere it is built and tested but never started.
+#![cfg_attr(not(windows), allow(dead_code, unused_variables))]
+
 use crate::index::VolumeIndex;
 use std::io::{self, Read, Write};
 use std::sync::Mutex;
@@ -303,6 +306,7 @@ fn valid_pipe_name(name: &str) -> bool {
 /// Opens the window's pipe. With `SECURITY_IDENTIFICATION`, the pipe's server (or a program that
 /// took the name first) can learn who connected but cannot act with the helper's elevated token.
 /// While another program holds the pipe, waits for the window to turn it away.
+#[cfg_attr(not(windows), allow(clippy::never_loop))]
 fn open_client(name: &str) -> io::Result<std::fs::File> {
     let mut options = std::fs::OpenOptions::new();
     options.read(true).write(true);

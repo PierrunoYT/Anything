@@ -257,7 +257,7 @@ impl Job {
             });
             // Verbatim, so folders named `x.` or `x ` are listed themselves rather than their
             // `x` twin (or nothing): Win32 strips trailing dots and spaces from plain paths (FC-15).
-            let root = crate::util::fs_path(&format!("{letter}:\\"));
+            let root = if cfg!(windows) { crate::util::fs_path(&format!("{letter}:\\")) } else { "/".into() };
             result = walk::walk_volume(letter, &root, &self.progress, &skipped, &not_followed, &self.cancel);
         }
 
@@ -353,9 +353,21 @@ pub fn fixed_drives() -> Vec<Drive> {
     drives
 }
 
+/// Outside Windows there are no drive letters: the one volume is the file system root, with the
+/// id `/`, and its folder scan also covers the file systems mounted below it.
 #[cfg(not(windows))]
 pub fn fixed_drives() -> Vec<Drive> {
-    Vec::new()
+    // The last `/` line of the mount table is the one in effect, e.g. `/dev/sda2 / ext4 rw 0 0`.
+    let filesystem = std::fs::read_to_string("/proc/self/mounts")
+        .unwrap_or_default()
+        .lines()
+        .rev()
+        .find_map(|line| {
+            let mut fields = line.split_whitespace().skip(1);
+            (fields.next() == Some("/")).then(|| fields.next().unwrap_or_default().to_string())
+        })
+        .unwrap_or_default();
+    vec![Drive { letter: '/', filesystem, label: String::new() }]
 }
 
 #[cfg(test)]
@@ -376,5 +388,16 @@ mod tests {
         assert!(indexer.status.is_poisoned());
         assert!(!indexer.is_busy());
         indexer.remove('C');
+    }
+
+    /// Outside Windows no drive was found, so nothing was indexed and every search came back
+    /// empty. The file system root is now the one volume.
+    #[cfg(not(windows))]
+    #[test]
+    fn the_file_system_root_is_the_volume_outside_windows() {
+        let drives = fixed_drives();
+        assert_eq!(drives.len(), 1);
+        assert_eq!(drives[0].letter, '/');
+        assert!(!drives[0].is_ntfs());
     }
 }

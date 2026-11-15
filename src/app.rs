@@ -8,7 +8,7 @@ use crate::mft_helper::MftHelper;
 use crate::preview::{Content, Preview, PreviewLoader, SaveError};
 use crate::quick_bar::{self, QuickBar};
 use crate::search::{Hit, SearchOptions, Searcher, Sort, find_row};
-use crate::util::{format_filetime, format_size, fs_path, group_digits, local_offset, win32_alias};
+use crate::util::{format_filetime, format_size, fs_path, group_digits, local_offset, volume_name, win32_alias};
 use eframe::egui::{self, Align, Color32, Key, Layout, Modifiers, RichText};
 use egui_extras::{Column, TableBuilder};
 use std::collections::BTreeSet;
@@ -345,7 +345,8 @@ impl FileCraftApp {
             status: None,
             tz_offset: local_offset(),
         };
-        if app.quick_search {
+        // The hotkey and tray icon exist on Windows only.
+        if app.quick_search && cfg!(windows) {
             app.start_background(&cc.egui_ctx);
         }
         app
@@ -674,7 +675,7 @@ impl FileCraftApp {
         // File-system calls (preview, edit) use the verbatim path; the shell and external programs
         // only take plain paths, so items Win32 would resolve to another file are refused (FC-15).
         let path = fs_path(&full);
-        let shell_path = if win32_alias(&full) {
+        let shell_path = if cfg!(windows) && win32_alias(&full) {
             Err(std::io::Error::other(
                 "the name ends in a dot or space or is a device name, so Windows would open a different item",
             ))
@@ -1009,7 +1010,8 @@ impl FileCraftApp {
                     self.rescan();
                     ui.close();
                 }
-                if !self.indexer.fast_indexing()
+                if cfg!(windows)
+                    && !self.indexer.fast_indexing()
                     && ui.add_enabled(self.helper_start.is_none(), egui::Button::new("Fast NTFS indexing (asks for administrator rights)")).clicked()
                 {
                     ui.close();
@@ -1114,7 +1116,8 @@ impl FileCraftApp {
             }
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if !self.indexer.fast_indexing()
+                if cfg!(windows)
+                    && !self.indexer.fast_indexing()
                     && ui
                         .add_enabled(self.helper_start.is_none(), egui::Button::new("⚡ Fast NTFS indexing").small())
                         .on_hover_text(
@@ -1244,7 +1247,9 @@ impl FileCraftApp {
                             ("Properties", RowAction::Properties),
                         ];
                         for (label, act) in items {
-                            if matches!(act, RowAction::EditInline | RowAction::EditExternal) && e.is_dir() {
+                            if matches!(act, RowAction::EditInline | RowAction::EditExternal) && e.is_dir()
+                                || matches!(act, RowAction::Properties) && !cfg!(windows)
+                            {
                                 continue;
                             }
                             if ui.button(label).clicked() {
@@ -1334,7 +1339,7 @@ impl FileCraftApp {
                     action = Some(RowAction::EditExternal);
                 }
             }
-            if ui.button("Properties").clicked() {
+            if cfg!(windows) && ui.button("Properties").clicked() {
                 action = Some(RowAction::Properties);
             }
         });
@@ -1534,9 +1539,9 @@ impl FileCraftApp {
                 for d in &self.drives {
                     let mut on = !self.excluded.contains(&d.letter);
                     let label = if d.label.is_empty() {
-                        format!("{}:  ({})", d.letter, d.filesystem)
+                        format!("{}  ({})", volume_name(d.letter), d.filesystem)
                     } else {
-                        format!("{}:  {}  ({})", d.letter, d.label, d.filesystem)
+                        format!("{}  {}  ({})", volume_name(d.letter), d.label, d.filesystem)
                     };
                     if ui.checkbox(&mut on, label).changed() {
                         changed_drives.push((d.letter, on));
@@ -1555,20 +1560,23 @@ impl FileCraftApp {
                 }
                 ui.add_space(10.0);
 
-                ui.strong("Quick search");
-                quick_toggled = ui
-                    .checkbox(&mut self.quick_search, "Search from anywhere with a hotkey")
-                    .on_hover_text("Closing the window then keeps FileCraft running in the notification area; use Exit to quit.")
-                    .changed();
-                ui.add_enabled_ui(self.quick_search, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Hotkey");
-                        let resp = ui.add(egui::TextEdit::singleline(&mut self.hotkey_text).desired_width(140.0));
-                        hotkey_lost_focus = resp.lost_focus();
+                // The hotkey and tray icon exist on Windows only.
+                if cfg!(windows) {
+                    ui.strong("Quick search");
+                    quick_toggled = ui
+                        .checkbox(&mut self.quick_search, "Search from anywhere with a hotkey")
+                        .on_hover_text("Closing the window then keeps FileCraft running in the notification area; use Exit to quit.")
+                        .changed();
+                    ui.add_enabled_ui(self.quick_search, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Hotkey");
+                            let resp = ui.add(egui::TextEdit::singleline(&mut self.hotkey_text).desired_width(140.0));
+                            hotkey_lost_focus = resp.lost_focus();
+                        });
                     });
-                });
-                if let Some(err) = self.hotkey_text_error.as_ref().or(self.hotkey_error.as_ref()) {
-                    ui.colored_label(ui.visuals().error_fg_color, err);
+                    if let Some(err) = self.hotkey_text_error.as_ref().or(self.hotkey_error.as_ref()) {
+                        ui.colored_label(ui.visuals().error_fg_color, err);
+                    }
                 }
             });
         self.show_settings = open;
@@ -1746,19 +1754,19 @@ fn show_content(ui: &mut egui::Ui, content: &mut Content) {
 
 fn drive_chip(ui: &mut egui::Ui, s: &crate::indexer::VolumeStatus) {
     use std::sync::atomic::Ordering;
-    let letter = s.drive.letter;
+    let letter = volume_name(s.drive.letter);
     let progress = s.progress.load(Ordering::Relaxed);
     let total = s.total.load(Ordering::Relaxed);
     let (text, color, tip) = match &s.phase {
-        Phase::Waiting => (format!("{letter}: …"), None, "Waiting".to_string()),
+        Phase::Waiting => (format!("{letter} …"), None, "Waiting".to_string()),
         Phase::Indexing(Source::Mft) => {
             let pct = (progress * 100).checked_div(total).unwrap_or(0);
-            (format!("{letter}: {pct}%"), None, "Reading the NTFS master file table".to_string())
+            (format!("{letter} {pct}%"), None, "Reading the NTFS master file table".to_string())
         }
         Phase::Indexing(Source::Walk) => (
-            format!("{letter}: {}", group_digits(progress)),
+            format!("{letter} {}", group_digits(progress)),
             None,
-            "Scanning folders (run as administrator for much faster indexing)".to_string(),
+            if cfg!(windows) { "Scanning folders (run as administrator for much faster indexing)" } else { "Scanning folders" }.to_string(),
         ),
         Phase::Ready => {
             let mut tip = format!("{} entries", group_digits(s.entries));
@@ -1787,9 +1795,9 @@ fn drive_chip(ui: &mut egui::Ui, s: &crate::indexer::VolumeStatus) {
                 tip.push_str(&format!("\nThe index could not be cached: {err}"));
             }
             let mark = if s.refreshing { "⟳" } else { "✔" };
-            (format!("{letter}: {mark}"), Some(Color32::from_rgb(90, 170, 90)), tip)
+            (format!("{letter} {mark}"), Some(Color32::from_rgb(90, 170, 90)), tip)
         }
-        Phase::Failed(err) => (format!("{letter}: ✖"), Some(ui.visuals().error_fg_color), format!("Indexing failed: {err}")),
+        Phase::Failed(err) => (format!("{letter} ✖"), Some(ui.visuals().error_fg_color), format!("Indexing failed: {err}")),
     };
     let mut rt = RichText::new(text).small();
     if let Some(c) = color {

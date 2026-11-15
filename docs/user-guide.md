@@ -5,6 +5,18 @@ like [Everything](https://www.voidtools.com/). Start `FileCraft.exe`; there are 
 helper with an internal one). When it is already running in the notification area, starting it again
 shows its window.
 
+## On Linux
+
+FileCraft also runs on Linux (`./FileCraft`). There are no drive letters: the one volume is the
+file system root `/`, shown as `/` in the status bar and in Settings. It is always indexed with a
+folder scan, which also enters the file systems mounted below `/` but not `/proc`, `/sys`, `/dev`
+and `/run`; symbolic links are listed but not followed. Paths use `/` (`etc/host` is a path term),
+and `\` and `:` are ordinary characters of names. The cache is kept in
+`$XDG_CACHE_HOME/filecraft/index`, by default `~/.cache/filecraft/index`. Open, Show in folder and
+the default external editor use `xdg-open`; set `FILECRAFT_EDITOR` (or the setting) to use another
+editor. Fast NTFS indexing, the quick search bar, the notification area icon and Properties exist
+on Windows only and are not shown.
+
 ## Window
 
 - **Search box** — results update on every keystroke. The toggles on the right are
