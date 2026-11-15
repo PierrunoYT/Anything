@@ -468,7 +468,7 @@ impl QuickBar {
                             .hint_text("Search files, folders and programs…")
                             .font(FontId::proportional(20.0))
                             .frame(egui::Frame::NONE)
-                            .vertical_align(egui::Align::Center),
+                            .align(egui::Align2::LEFT_CENTER),
                     );
                     if std::mem::take(&mut self.focus_input) || !resp.has_focus() {
                         resp.request_focus();

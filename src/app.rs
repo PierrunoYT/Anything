@@ -379,7 +379,7 @@ impl FileCraftApp {
         }
         let mut keep_running = false;
         let mut exit = false;
-        let modal = egui::Modal::new(egui::Id::new("close-notice")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("close-notice")).show(ctx, |ui| {
             ui.set_width(440.0);
             ui.heading("FileCraft keeps running");
             ui.label(format!(
@@ -846,7 +846,7 @@ impl FileCraftApp {
         let editing_text = ctx.text_edit_focused()
             && ctx
                 .memory(|m| m.focused())
-                .is_some_and(|id| id != egui::Id::new(SEARCH_BOX_ID) && id != egui::Id::new(PREVIEW_TEXT_ID));
+                .is_some_and(|id| id != egui::Id::unique(SEARCH_BOX_ID) && id != egui::Id::unique(PREVIEW_TEXT_ID));
         let mut nav: isize = 0;
         let mut jump: Option<bool> = None; // Some(true) = end, Some(false) = start
         let mut action = None;
@@ -1015,10 +1015,10 @@ impl FileCraftApp {
             let resp = ui.add_sized(
                 [ui.available_width(), 28.0],
                 egui::TextEdit::singleline(&mut self.query)
-                    .id(egui::Id::new(SEARCH_BOX_ID))
+                    .id(egui::Id::unique(SEARCH_BOX_ID))
                     .hint_text("Search everything…   e.g.  report ext:pdf   *.rs   size:>100mb   dm:today   folder:src")
                     .font(egui::TextStyle::Body)
-                    .vertical_align(Align::Center),
+                    .align(egui::Align2::LEFT_CENTER),
             );
             if self.focus_search {
                 resp.request_focus();
@@ -1373,7 +1373,7 @@ impl FileCraftApp {
             .unwrap_or_default();
         let closing = matches!(pending, Pending::Close);
         let mut choice = None;
-        let modal = egui::Modal::new(egui::Id::new("unsaved-changes")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("unsaved-changes")).show(ctx, |ui| {
             ui.set_width(340.0);
             ui.heading("Unsaved changes");
             ui.label(format!("Save your changes to {name}?"));
@@ -1427,7 +1427,7 @@ impl FileCraftApp {
     fn editor_confirm_modal(&mut self, ctx: &egui::Context) {
         let Some(confirm) = &self.editor_confirm else { return };
         let mut choice = None;
-        let modal = egui::Modal::new(egui::Id::new("confirm-elevated-editor")).show(ctx, |ui| {
+        let modal = egui::Modal::new(egui::Id::unique("confirm-elevated-editor")).show(ctx, |ui| {
             ui.set_width(420.0);
             ui.heading("Run the editor as administrator?");
             ui.label("FileCraft is running as administrator, so the external editor would too.");
@@ -1653,7 +1653,7 @@ fn show_content(ui: &mut egui::Ui, content: &mut Content) {
                 let mut view: &str = text;
                 ui.add(
                     egui::TextEdit::multiline(&mut view)
-                        .id(egui::Id::new(PREVIEW_TEXT_ID))
+                        .id(egui::Id::unique(PREVIEW_TEXT_ID))
                         .code_editor()
                         .desired_width(f32::INFINITY),
                 );

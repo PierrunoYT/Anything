@@ -51,6 +51,9 @@ All notable changes to this project are documented here. The format follows
   first close explains this once and offers to exit instead.
 - Dependabot now also proposes weekly updates for the crates in `Cargo.lock`, not only for the
   GitHub Actions. Fixes for crate advisories used to depend on someone running `cargo update`.
+- eframe and egui_extras updated to 0.37 together (the separate Dependabot bumps mixed two egui
+  versions and did not compile). Replaced the APIs 0.37 deprecates: `Id::new` → `Id::unique`,
+  `TextEdit::vertical_align` → `TextEdit::align`.
 
 ### Fixed
 
