@@ -970,8 +970,9 @@ mod tests {
             let start = Instant::now();
             search(&index, &q, Sort { key, descending: false }, &|| false).unwrap();
             let took = start.elapsed();
-            // About 2 s each before (optimised test profile); a few milliseconds now.
-            assert!(took < Duration::from_millis(500), "`{text}` by {key:?} took {took:?}");
+            // About 2 s each before (optimised test profile). Now about 85 ms for `path:` and
+            // 210 ms for the glob on a fast machine, and 2–3× that on CI runners.
+            assert!(took < Duration::from_millis(1500), "`{text}` by {key:?} took {took:?}");
         }
     }
 

@@ -57,6 +57,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- The deep-chain path query test (FC-12) no longer fails at random in CI: its 500 ms limit sat
+  right at the time a glob query takes on a CI runner (520–550 ms). The limit is now 1.5 s, which
+  still catches the old quadratic behaviour (about 2 s).
 - Choosing *Edit in preview pane* or pressing F4 again while already editing no longer resets the
   buffer and silently discards unsaved changes (FC-03).
 - Saving an inline edit no longer recreates a file that was deleted on disk without asking, and
