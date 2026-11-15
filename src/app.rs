@@ -1719,6 +1719,14 @@ fn drive_chip(ui: &mut egui::Ui, s: &crate::indexer::VolumeStatus) {
             if s.refreshing {
                 tip.push_str(" · refreshing now");
             }
+            if s.watching {
+                tip.push_str("\nNew, changed and deleted files are picked up as they happen");
+                if let Some(at) = s.updated_at {
+                    tip.push_str(&format!(" (last update {})", ago(at)));
+                }
+            } else if let Some(err) = &s.watch_error {
+                tip.push_str(&format!("\nChanges are not followed ({err}): press F5 to re-index"));
+            }
             if s.skipped > 0 {
                 tip.push_str(&format!("\n{} items could not be read and are missing", group_digits(s.skipped)));
             }

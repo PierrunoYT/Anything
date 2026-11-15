@@ -19,7 +19,8 @@ shows its window.
   `…` waiting, `45%` reading the MFT, `1,234,567` entries found by a folder scan so far,
   `✔` ready, `⟳` refreshing in the background, `✖` failed (hover for details). The hover text
   also says how many items a folder scan could not read, how many linked folders (junctions,
-  symbolic links, drives mounted into a folder) it listed without entering, and whether the
+  symbolic links, drives mounted into a folder) it listed without entering, whether changes on
+  the drive are being followed (see [Live updates](#live-updates)), and whether the
   index could not be cached. The contents of a drive mounted into a folder are only indexed when
   it also has a drive letter.
 
@@ -79,8 +80,23 @@ helper ends when FileCraft closes. A folder scan cannot see into folders your ac
 everything on the volume. A heavily fragmented master file table is read in full too; if its
 layout cannot be read consistently, FileCraft uses the folder scan instead of a partial index.
 
-The index does not follow changes live: files created or deleted after the last index appear on
-the next re-index.
+### Live updates
+
+While FileCraft runs, it follows the changes on every indexed drive, whichever mode built the
+index: files and folders that are created, deleted, renamed, moved or modified show up in the
+results within a second or two, and the open search updates by itself. A folder that is copied or
+unpacked in is read in full. This needs no administrator rights. Changes are applied at most once a
+second; when a drive changes all the time, FileCraft waits longer between updates so that keeping up
+never takes more than a small share of the processor. The drive's hover text says when the index
+was last updated this way.
+
+- Changes made while FileCraft was closed appear on the next re-index (the cache age setting
+  above, or F5). The updated index is written to the cache about every ten minutes, so changes
+  FileCraft followed survive a restart.
+- When so much changes at once that Windows drops some notifications, FileCraft re-indexes the
+  drive in the background, at most every five minutes.
+- If a drive cannot be watched, its hover text says why; that drive's index then only changes on
+  re-index.
 
 ## Search syntax
 

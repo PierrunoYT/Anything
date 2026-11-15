@@ -5,6 +5,8 @@
 | `src/main.rs` | Window setup (`eframe`) and app icon; dispatches `--mft-helper` to the helper |
 | `src/app.rs` | The UI: search box, results table, preview/editor, status bar, settings, keys |
 | `src/index.rs` | `VolumeIndex` data model, builder, sort orders, folder sizes, disk cache |
+| `src/index/patch.rs` | Live updates: applies reported file system changes to a `VolumeIndex` in place |
+| `src/watch.rs` | Follows a drive's changes with `ReadDirectoryChangesW` (no admin) |
 | `src/mft.rs` | NTFS master file table reader (administrator) |
 | `src/mft_helper.rs` | The elevated helper process that runs `mft.rs` for the unelevated window, and its pipe protocol |
 | `src/walk.rs` | Parallel directory walk (fallback, no admin) |
@@ -19,7 +21,7 @@
 ## Index layout
 
 Each drive is one immutable `VolumeIndex`, shared through `Arc` and swapped atomically when a
-re-index completes. Entries are fixed-size structs (parent id, attributes, size, FILETIME,
+re-index completes or followed changes have been applied to a copy (see Live updates below). Entries are fixed-size structs (parent id, attributes, size, FILETIME,
 offsets into two string arenas: original names and lowercased names). Entry 0 is the drive root;
 full paths are rebuilt on demand by walking parent ids, so no path strings are stored.
 
@@ -81,7 +83,45 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   if the cache is missing or too old (MFT for NTFS drives when the helper runs or the window
   itself is elevated, else walk, with walk as the fallback when the MFT read fails or panics),
   save the cache and publish again. Each drive has its own cancel flag. Progress is exposed through
-  atomics that the status bar reads.
+  atomics that the status bar reads. The thread then stays on to follow the drive (below) until
+  its job is cancelled.
+- **Live updates** (`watch.rs`, `index/patch.rs`) — the job starts a watcher before it loads or
+  builds the index, so changes made meanwhile are queued, not missed. The watcher thread keeps an
+  overlapped `ReadDirectoryChangesW` on the verbatim drive root (whole subtree, 512 KiB buffer)
+  and waits on it in 250 ms steps so it can stop. Each buffer becomes a list of changes: a path to
+  check, or a rename (old and new name paired). 8.3 short names are turned into long names with
+  `GetLongPathNameW`. Batches go out through a bounded channel without ever blocking; a full
+  buffer (`ERROR_NOTIFY_ENUM_DIR`, or zero bytes) or a full channel is reported as an overflow.
+  The job applies what has queued up at most once a second, and waits twenty times as long as the
+  last batch took (up to 30 s), so a busy drive costs a few percent of a core at most.
+  - **Reconciling.** A change only names a path. `VolumeIndex::apply` compares the index with the
+    disk at that path now, so late, repeated or reordered changes are harmless. An item that exists
+    but is not in the index is added, a new folder with everything below it (listed like the
+    walk, links not entered). One that is gone is removed, a folder with its subtree. One that
+    exists is updated (attributes, size, time, and the name's case). A path whose folder is gone
+    too is held back: a rename of that folder later in the batch checks it again at the new place,
+    and a deletion removes it with the folder anyway. A rename keeps the entry and moves it (and so
+    its subtree), replacing an item already at the new path. An item that cannot be checked (no
+    access) is left as it is.
+  - **Lookups.** Paths are resolved component by component from the root by binary search in
+    `by_name`, which lists every name in lowercase order, keeping the match whose parent is right.
+    Entries a batch adds or renames are not in `by_name` under their new name yet, so the batch
+    keeps them in a small map.
+  - **Sort orders.** Entries keep their ids; new ones are appended, removed ones become unused
+    slots. Folder sizes are adjusted up the parent chain. Each order then drops the changed and
+    removed entries and merges the changed ones back in by binary search, a pass over the order
+    rather than a sort. The path order compares two entries by the chains of folder names above
+    them, which orders them like the folder ranks without computing those, because folders keep
+    their relative order. When a folder was renamed or moved (its whole subtree moves), or more
+    than 10,000 entries changed, the path order is sorted again instead. Once unused slots or dead
+    names make up half of the index, it is rebuilt without them.
+  - **Publishing.** The window holds the index, so applying needs a copy (`Arc::make_mut`): a batch
+    that would change nothing (checked first with `VolumeIndex::is_current`) is skipped. Each
+    patched index is published like a scanned one, so the open search runs again and the selection
+    is restored by path. It is saved to the cache ten minutes after its first unsaved change; its
+    build time stays that of the scan, so the cache age still decides when the drive is scanned
+    again at startup. After an overflow (or an index that ran out of ids or name space) the drive
+    is scanned again, at most every five minutes, or three times as long as the last scan took.
 - **NTFS helper** (`mft_helper.rs`) — the window never needs administrator rights.
   - **Start.** *Fast NTFS indexing* creates a named pipe with a random name, single instance
     (`FILE_FLAG_FIRST_PIPE_INSTANCE`) and local only, then starts `FileCraft.exe --mft-helper

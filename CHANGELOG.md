@@ -41,6 +41,13 @@ All notable changes to this project are documented here. The format follows
   result, Ctrl+Enter shows it in its folder, Shift+Enter shows all results in the main window.
 - Notification area icon while quick search is on: clicking it shows the window, and its menu
   offers Open FileCraft, Quick search and Exit. Starting FileCraft again shows the running instance.
+- Live index updates: each drive's changes are followed with `ReadDirectoryChangesW`, whether the
+  index came from the master file table or a folder scan, and without administrator rights.
+  Files and folders that are created, deleted, renamed, moved or modified show up within a second
+  or two instead of on the next re-index. Changes are applied to the index in place (sort orders
+  are merged, not re-sorted) in batches that back off on busy drives. The updated index is cached
+  every ten minutes, and a drive whose notifications overflowed is re-indexed in the background.
+  The drive's hover text says whether changes are followed.
 
 ### Changed
 

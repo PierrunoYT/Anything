@@ -198,8 +198,9 @@ fn next_entry_id(next: &AtomicU32) -> Option<u32> {
     }
 }
 
+/// Attributes, size and FILETIME modification time of an item, as the index stores them.
 #[cfg(windows)]
-fn attributes(meta: &std::fs::Metadata) -> (u32, u64, i64) {
+pub(crate) fn attributes(meta: &std::fs::Metadata) -> (u32, u64, i64) {
     use std::os::windows::fs::MetadataExt;
     let attrs = meta.file_attributes();
     let size = if attrs & ATTR_DIRECTORY != 0 { 0 } else { meta.file_size() };
@@ -207,7 +208,7 @@ fn attributes(meta: &std::fs::Metadata) -> (u32, u64, i64) {
 }
 
 #[cfg(not(windows))]
-fn attributes(meta: &std::fs::Metadata) -> (u32, u64, i64) {
+pub(crate) fn attributes(meta: &std::fs::Metadata) -> (u32, u64, i64) {
     let attrs = if meta.is_dir() { ATTR_DIRECTORY } else { 0 };
     let mtime = meta
         .modified()

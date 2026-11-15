@@ -1,14 +1,33 @@
 //! Discovers drives and keeps one [`VolumeIndex`] per drive up to date in the background:
-//! load the on-disk cache first (instant), then rebuild via the MFT (admin) or a folder walk.
+//! load the on-disk cache first (instant), then rebuild via the MFT (admin) or a folder walk,
+//! then follow the drive's changes and patch the index as they happen.
 
+use crate::index::patch::Change;
 use crate::index::{Source, VolumeIndex, cache_path};
 use crate::mft_helper::MftHelper;
+use crate::watch::{self, LiveDisk, Watcher};
 use crate::{mft, walk};
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, unbounded};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
+
+/// Followed changes are applied in batches, at most this often…
+const MIN_APPLY_INTERVAL: Duration = Duration::from_secs(1);
+/// …and at least this often while changes keep coming. Between the two, the wait is twenty times
+/// the last batch's cost, so patching a big index never takes more than a few percent of a core.
+const MAX_APPLY_INTERVAL: Duration = Duration::from_secs(30);
+/// How often a following job checks for changes and for being cancelled.
+const FOLLOW_TICK: Duration = Duration::from_millis(250);
+/// A patched index is written to the cache this long after its first unsaved change, so a restart
+/// does not lose what was followed.
+const SAVE_INTERVAL: Duration = Duration::from_secs(10 * 60);
+/// After lost changes, the drive is scanned again, but not sooner than this after the last scan
+/// (or three times as long as that scan took).
+const MIN_RESCAN_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Changes waiting to be applied beyond this count as lost.
+const MAX_PENDING: usize = 1 << 20;
 
 #[derive(Clone, Debug)]
 pub struct Drive {
@@ -51,6 +70,12 @@ pub struct VolumeStatus {
     pub not_followed: usize,
     /// Why the last index could not be written to the cache, if it could not.
     pub cache_error: Option<String>,
+    /// Changes on the drive are being followed (see `watch`), so the index stays current.
+    pub watching: bool,
+    /// Why changes are not followed, if watching failed.
+    pub watch_error: Option<String>,
+    /// When followed changes last updated the index.
+    pub updated_at: Option<SystemTime>,
 }
 
 pub enum IndexEvent {
@@ -125,6 +150,9 @@ impl Indexer {
                 skipped: previous.as_ref().map_or(0, |p| p.skipped),
                 not_followed: previous.as_ref().map_or(0, |p| p.not_followed),
                 cache_error: previous.as_ref().and_then(|p| p.cache_error.clone()),
+                watching: false,
+                watch_error: None,
+                updated_at: previous.as_ref().and_then(|p| p.updated_at),
             };
             status.insert(drive.letter, st.clone());
 
@@ -190,12 +218,14 @@ impl Job {
         (self.notify)();
     }
 
-    fn publish(&self, v: VolumeIndex) {
+    /// Hands a loaded or scanned index to the window; returns it unless the job was cancelled.
+    fn publish(&self, v: VolumeIndex) -> Option<Arc<VolumeIndex>> {
         let (entries, source, built_at, build_time) = (v.len(), v.source, v.built_at, v.build_time);
         if self.cancel.load(Ordering::Relaxed) {
-            return;
+            return None;
         }
-        let _ = self.tx.send(IndexEvent::Ready(Arc::new(v)));
+        let v = Arc::new(v);
+        let _ = self.tx.send(IndexEvent::Ready(Arc::clone(&v)));
         self.update(|s| {
             s.phase = Phase::Ready;
             s.entries = entries;
@@ -203,24 +233,153 @@ impl Job {
             s.built_at = Some(built_at);
             s.build_time = Some(build_time);
         });
+        Some(v)
+    }
+
+    /// Hands an index patched with followed changes to the window.
+    fn publish_update(&self, v: &Arc<VolumeIndex>) {
+        if self.cancel.load(Ordering::Relaxed) {
+            return;
+        }
+        let _ = self.tx.send(IndexEvent::Ready(Arc::clone(v)));
+        let entries = v.len();
+        self.update(|s| {
+            s.entries = entries;
+            s.updated_at = Some(SystemTime::now());
+        });
+    }
+
+    fn root(&self) -> std::path::PathBuf {
+        // Verbatim, so folders named `x.` or `x ` are listed themselves rather than their
+        // `x` twin (or nothing): Win32 strips trailing dots and spaces from plain paths (FC-15).
+        crate::util::fs_path(&format!("{}:\\", self.drive.letter))
     }
 
     fn run(self) {
         let letter = self.drive.letter;
         let mut have_index = self.has_index;
         let mut fresh = false;
+        let mut index = None;
+
+        // Changes are watched from the start, so those made while the index is loaded or built
+        // are applied to it afterwards rather than missed.
+        let (watch_tx, watch_rx) = Watcher::channel();
+        let watcher = match Watcher::start(&self.root(), watch_tx) {
+            Ok(w) => Some(w),
+            Err(e) => {
+                self.update(|s| s.watch_error = Some(e.to_string()));
+                None
+            }
+        };
 
         if !self.has_index
             && let Ok(cached) = VolumeIndex::load(&cache_path(letter), letter) {
                 let age = cached.built_at.elapsed().unwrap_or(Duration::MAX);
                 fresh = age < self.max_age;
-                self.publish(cached);
+                index = self.publish(cached);
                 have_index = true;
             }
-        if fresh && !self.force {
-            return;
+        let mut scanned_in = Duration::ZERO;
+        if !fresh || self.force {
+            let started = Instant::now();
+            index = self.scan(have_index).or(index);
+            scanned_in = started.elapsed();
         }
+        if let (Some(index), Some(watcher)) = (index, watcher) {
+            self.follow(index, watcher, watch_rx, scanned_in);
+        }
+    }
 
+    /// Applies the changes `watcher` reports to `index` until the job is cancelled, scanning the
+    /// drive again when changes were lost.
+    fn follow(&self, mut index: Arc<VolumeIndex>, watcher: Watcher, events: Receiver<watch::Event>, mut scan_took: Duration) {
+        let mut watcher = Some(watcher);
+        self.update(|s| {
+            s.watching = true;
+            s.watch_error = None;
+        });
+        let disk = LiveDisk::new(self.root());
+        let mut pending: Vec<Change> = Vec::new();
+        let mut first_pending: Option<Instant> = None;
+        let mut wait = MIN_APPLY_INTERVAL;
+        let mut lost = false;
+        let mut last_scan = Instant::now();
+        let mut unsaved: Option<Instant> = None;
+
+        while !self.cancel.load(Ordering::Relaxed) {
+            match events.recv_timeout(FOLLOW_TICK) {
+                Ok(watch::Event::Changes(changes)) => {
+                    first_pending.get_or_insert_with(Instant::now);
+                    pending.extend(changes);
+                    if pending.len() > MAX_PENDING {
+                        lost = true;
+                        pending.clear();
+                        first_pending = None;
+                    }
+                }
+                Ok(watch::Event::Overflow) => lost = true,
+                Err(RecvTimeoutError::Timeout) => {}
+                Ok(watch::Event::Failed(e)) => {
+                    drop(watcher.take());
+                    self.update(|s| {
+                        s.watching = false;
+                        s.watch_error = Some(e);
+                    });
+                    return;
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    self.update(|s| {
+                        s.watching = false;
+                        s.watch_error = Some("the watcher stopped".into());
+                    });
+                    return;
+                }
+            }
+
+            if lost && last_scan.elapsed() >= MIN_RESCAN_INTERVAL.max(scan_took * 3) {
+                // What was pending is in the new scan; later changes keep coming in meanwhile.
+                lost = false;
+                pending.clear();
+                first_pending = None;
+                let started = Instant::now();
+                if let Some(v) = self.scan(true) {
+                    index = v;
+                    unsaved = None;
+                }
+                scan_took = started.elapsed();
+                last_scan = Instant::now();
+                continue;
+            }
+
+            if first_pending.is_some_and(|t| t.elapsed() >= wait) {
+                first_pending = None;
+                let changes = std::mem::take(&mut pending);
+                let started = Instant::now();
+                if !index.is_current(&changes, &disk) {
+                    // Copies the index while the window still shows the previous one.
+                    let applied = Arc::make_mut(&mut index).apply(&changes, &disk);
+                    lost |= applied.rescan;
+                    if applied.changed {
+                        self.publish_update(&index);
+                        unsaved.get_or_insert_with(Instant::now);
+                    }
+                }
+                wait = (started.elapsed() * 20).clamp(MIN_APPLY_INTERVAL, MAX_APPLY_INTERVAL);
+            }
+
+            if unsaved.is_some_and(|t| t.elapsed() >= SAVE_INTERVAL) {
+                unsaved = None;
+                let superseded = || self.cancel.load(Ordering::Relaxed);
+                let cache_error = index.save_unless(&cache_path(self.drive.letter), &superseded).err().map(|e| e.to_string());
+                self.update(|s| s.cache_error = cache_error);
+            }
+        }
+    }
+
+    /// Builds the index from the MFT or a folder scan and publishes it. `have_index`: the window
+    /// already shows an index for this drive, which stays until the new one is ready.
+    fn scan(&self, have_index: bool) -> Option<Arc<VolumeIndex>> {
+        let letter = self.drive.letter;
         let helper = self.helper.as_ref().filter(|h| h.is_alive());
         let use_mft = self.drive.is_ntfs() && (self.elevated || helper.is_some());
         self.update(|s| {
@@ -255,10 +414,7 @@ impl Job {
                     s.phase = Phase::Indexing(Source::Walk);
                 }
             });
-            // Verbatim, so folders named `x.` or `x ` are listed themselves rather than their
-            // `x` twin (or nothing): Win32 strips trailing dots and spaces from plain paths (FC-15).
-            let root = crate::util::fs_path(&format!("{letter}:\\"));
-            result = walk::walk_volume(letter, &root, &self.progress, &skipped, &not_followed, &self.cancel);
+            result = walk::walk_volume(letter, &self.root(), &self.progress, &skipped, &not_followed, &self.cancel);
         }
 
         match result {
@@ -266,20 +422,24 @@ impl Job {
                 // A cancelled (superseded) job must not replace the newer job's cache.
                 let superseded = || self.cancel.load(Ordering::Relaxed);
                 let cache_error = v.save_unless(&cache_path(letter), &superseded).err().map(|e| e.to_string());
-                self.publish(v);
+                let published = self.publish(v);
                 self.update(|s| {
                     s.refreshing = false;
                     s.skipped = skipped.load(Ordering::Relaxed);
                     s.not_followed = not_followed.load(Ordering::Relaxed);
                     s.cache_error = cache_error;
                 });
+                published
             }
-            Err(e) => self.update(|s| {
-                s.refreshing = false;
-                if !have_index {
-                    s.phase = Phase::Failed(e.to_string());
-                }
-            }),
+            Err(e) => {
+                self.update(|s| {
+                    s.refreshing = false;
+                    if !have_index {
+                        s.phase = Phase::Failed(e.to_string());
+                    }
+                });
+                None
+            }
         }
     }
 }

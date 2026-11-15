@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+pub mod patch;
+
 /// Parent value of a volume's root entry.
 pub const NONE: u32 = u32::MAX;
 
@@ -66,9 +68,11 @@ impl Source {
     }
 }
 
+#[derive(Clone)]
 pub struct VolumeIndex {
     pub letter: char,
     pub source: Source,
+    /// When the scan this index comes from started; live updates (see [`patch`]) keep it.
     pub built_at: SystemTime,
     pub build_time: Duration,
     names: String,
@@ -79,6 +83,8 @@ pub struct VolumeIndex {
     pub by_path: Vec<u32>,
     pub by_size: Vec<u32>,
     pub by_date: Vec<u32>,
+    /// Bytes of the name arenas that no entry uses any more (renamed or removed by live updates).
+    dead_name_bytes: usize,
 }
 
 impl VolumeIndex {
@@ -255,36 +261,17 @@ impl VolumeBuilder {
     }
 
     fn make_entry(&mut self, name: &str, parent: u32, attrs: u32, size: u64, mtime: i64) -> Entry {
-        let name = truncate_name(name);
-        // ASCII names (nearly all) are lowercased in place; others may change length.
-        let lowered = (!name.is_ascii()).then(|| name.to_lowercase());
-        let lowered_len = lowered.as_ref().map_or(name.len(), String::len);
-        if self.full
-            || self.names.len() + name.len() > self.arena_limit
-            || self.lower.len() + lowered_len > self.arena_limit
-        {
+        let stored = if self.full { None } else { store_name(&mut self.names, &mut self.lower, self.arena_limit, name) };
+        let Some(n) = stored else {
             self.full = true;
             return Entry { parent, attrs, size, mtime, ..Entry::default() };
-        }
-        let name_off = self.names.len() as u32;
-        self.names.push_str(name);
-        let lower_off = self.lower.len() as u32;
-        match &lowered {
-            Some(l) => self.lower.push_str(l),
-            None => self.lower.extend(name.bytes().map(|b| b.to_ascii_lowercase() as char)),
-        }
-        // Lowercasing can lengthen a name; cut on a character boundary so the range stays valid.
-        let mut lower_end = self.lower.len().min(lower_off as usize + u16::MAX as usize);
-        while !self.lower.is_char_boundary(lower_end) {
-            lower_end -= 1;
-        }
-        let lower_len = (lower_end - lower_off as usize) as u16;
+        };
         Entry {
-            name_off,
-            lower_off,
+            name_off: n.name_off,
+            lower_off: n.lower_off,
             parent,
-            name_len: name.len() as u16,
-            lower_len,
+            name_len: n.name_len,
+            lower_len: n.lower_len,
             attrs,
             size,
             mtime,
@@ -357,6 +344,7 @@ impl VolumeBuilder {
             by_path,
             by_size,
             by_date,
+            dead_name_bytes: 0,
         }
     }
 }
@@ -374,6 +362,56 @@ pub fn valid_name(name: &str) -> bool {
 fn arena_str(arena: &str, off: u32, len: u16) -> Option<&str> {
     let start = off as usize;
     arena.get(start..start.checked_add(len as usize)?)
+}
+
+/// Where [`store_name`] put a name and its lowercase form.
+struct StoredName {
+    name_off: u32,
+    name_len: u16,
+    lower_off: u32,
+    lower_len: u16,
+}
+
+/// The lowercase form stored for `name` (see [`store_name`]): what searches match and live
+/// updates look names up by. Cut to `u16::MAX` bytes on a character boundary.
+fn lower_key(name: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
+    let name = truncate_name(name);
+    // ASCII names (nearly all) keep their length; others may grow when lowercased.
+    let lowered: Cow<str> = if !name.is_ascii() {
+        Cow::Owned(name.to_lowercase())
+    } else if name.bytes().any(|b| b.is_ascii_uppercase()) {
+        Cow::Owned(name.to_ascii_lowercase())
+    } else {
+        Cow::Borrowed(name)
+    };
+    if lowered.len() <= u16::MAX as usize {
+        return lowered;
+    }
+    let mut end = u16::MAX as usize;
+    while !lowered.is_char_boundary(end) {
+        end -= 1;
+    }
+    Cow::Owned(lowered[..end].to_owned())
+}
+
+/// Appends `name` (truncated) and its [`lower_key`] to the arenas, or returns `None`, leaving them
+/// as they were, when either would grow past `limit` bytes.
+fn store_name(names: &mut String, lower: &mut String, limit: usize, name: &str) -> Option<StoredName> {
+    let name = truncate_name(name);
+    let lowered = lower_key(name);
+    if names.len() + name.len() > limit || lower.len() + lowered.len() > limit {
+        return None;
+    }
+    let stored = StoredName {
+        name_off: names.len() as u32,
+        name_len: name.len() as u16,
+        lower_off: lower.len() as u32,
+        lower_len: lowered.len() as u16,
+    };
+    names.push_str(name);
+    lower.push_str(&lowered);
+    Some(stored)
 }
 
 fn truncate_name(name: &str) -> &str {
@@ -818,6 +856,7 @@ impl VolumeIndex {
             by_path,
             by_size,
             by_date,
+            dead_name_bytes: 0,
         })
     }
 
