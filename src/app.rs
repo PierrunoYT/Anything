@@ -74,6 +74,48 @@ fn close_step(has_background: bool, quitting: bool, notice_shown: bool, window_v
     }
 }
 
+/// Where Tab takes the keyboard focus in the main window.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TabMove {
+    /// From the search box to the results.
+    ToResults,
+    /// From the results back to the search box, with its text selected.
+    ToSearchBox,
+}
+
+/// Takes a plain Tab for switching between the search box and the results, in place of egui's own
+/// focus traversal. Any other focused text field (the preview text, the inline editor) keeps it.
+fn take_tab(ctx: &egui::Context) -> Option<TabMove> {
+    let search_box = egui::Id::unique(SEARCH_BOX_ID);
+    let tab_move = if ctx.memory(|m| m.has_focus(search_box)) {
+        TabMove::ToResults
+    } else if ctx.text_edit_focused() {
+        return None;
+    } else {
+        TabMove::ToSearchBox
+    };
+    if !ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Tab)) {
+        return None;
+    }
+    ctx.memory_mut(|m| {
+        // egui read the Tab when the pass began and would hand the focus to the next widget.
+        m.move_focus(egui::FocusDirection::None);
+        match tab_move {
+            TabMove::ToResults => m.surrender_focus(search_box),
+            TabMove::ToSearchBox => m.request_focus(search_box),
+        }
+    });
+    Some(tab_move)
+}
+
+/// Selects all of `text` in the text field `id`, so typing replaces it.
+fn select_all_text(ctx: &egui::Context, id: egui::Id, text: &str) {
+    let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+    let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(text.chars().count()));
+    state.cursor.set_char_range(Some(all));
+    state.store(ctx, id);
+}
+
 /// What becomes of the text in the settings' hotkey field.
 #[derive(Clone, PartialEq, Eq, Debug)]
 enum HotkeyEdit {
@@ -843,6 +885,18 @@ impl FileCraftApp {
     // ── Keyboard ──
 
     fn handle_keys(&mut self, ctx: &egui::Context) {
+        // Settings and Help keep egui's Tab order between their own fields.
+        if !self.show_settings && !self.show_help {
+            match take_tab(ctx) {
+                Some(TabMove::ToResults) => {
+                    if self.selected_row.is_none() {
+                        self.request_select(0);
+                    }
+                }
+                Some(TabMove::ToSearchBox) => select_all_text(ctx, egui::Id::unique(SEARCH_BOX_ID), &self.query),
+                None => {}
+            }
+        }
         let editing_text = ctx.text_edit_focused()
             && ctx
                 .memory(|m| m.focused())
@@ -1603,6 +1657,7 @@ impl FileCraftApp {
                         ("Ctrl+E", "open in the external editor"),
                         ("Ctrl+Shift+C", "copy full path"),
                         ("Ctrl+F / Esc", "focus the search box / clear it"),
+                        ("Tab", "switch between the search box and the results"),
                         ("F2", "toggle the preview pane"),
                         ("F5", "re-index all drives"),
                     ];
@@ -1931,5 +1986,80 @@ mod tests {
         let own = SearchOptions { regex: true, ..Default::default() };
         let chosen = SearchOptions { match_path: true, ..Default::default() };
         assert_eq!(options_to_save(chosen, Some(own)), chosen);
+    }
+
+    fn tab() -> egui::RawInput {
+        egui::RawInput {
+            events: vec![egui::Event::Key {
+                key: Key::Tab,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Modifiers::NONE,
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// One frame of the search box, a button after it and another text field, with Tab taken as
+    /// `handle_keys` takes it.
+    fn frame(ctx: &egui::Context, input: egui::RawInput, query: &mut String, other: &mut String) -> Option<TabMove> {
+        let mut moved = None;
+        let mut output = ctx.run_ui(input, |ui| {
+            moved = take_tab(ui.ctx());
+            if moved == Some(TabMove::ToSearchBox) {
+                select_all_text(ui.ctx(), egui::Id::unique(SEARCH_BOX_ID), query);
+            }
+            ui.add(egui::TextEdit::singleline(&mut *query).id(egui::Id::unique(SEARCH_BOX_ID)));
+            let _ = ui.button("Next");
+            ui.add(egui::TextEdit::singleline(&mut *other).id(egui::Id::unique("other")));
+        });
+        // No renderer takes the font texture here.
+        output.textures_delta.clear();
+        moved
+    }
+
+    fn focused(ctx: &egui::Context) -> Option<egui::Id> {
+        ctx.memory(|m| m.focused())
+    }
+
+    /// Tab used to hand the focus from the search box to the next widget in egui's order.
+    #[test]
+    fn tab_moves_from_the_search_box_to_the_results() {
+        let ctx = egui::Context::default();
+        let (mut query, mut other) = ("report".to_string(), String::new());
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+        ctx.memory_mut(|m| m.request_focus(egui::Id::unique(SEARCH_BOX_ID)));
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+
+        assert_eq!(frame(&ctx, tab(), &mut query, &mut other), Some(TabMove::ToResults));
+        assert_eq!(focused(&ctx), None);
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+        assert_eq!(focused(&ctx), None);
+    }
+
+    #[test]
+    fn tab_from_the_results_selects_the_whole_query() {
+        let ctx = egui::Context::default();
+        let (mut query, mut other) = ("report".to_string(), String::new());
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+
+        assert_eq!(frame(&ctx, tab(), &mut query, &mut other), Some(TabMove::ToSearchBox));
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+        assert_eq!(focused(&ctx), Some(egui::Id::unique(SEARCH_BOX_ID)));
+        let range = egui::TextEdit::load_state(&ctx, egui::Id::unique(SEARCH_BOX_ID)).and_then(|s| s.cursor.char_range());
+        let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(6));
+        assert_eq!(range.map(|r| r.as_sorted_char_range()), Some(all.as_sorted_char_range()));
+    }
+
+    #[test]
+    fn other_text_fields_keep_tab() {
+        let ctx = egui::Context::default();
+        let (mut query, mut other) = ("report".to_string(), String::new());
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+        ctx.memory_mut(|m| m.request_focus(egui::Id::unique("other")));
+        let _ = frame(&ctx, Default::default(), &mut query, &mut other);
+
+        assert_eq!(frame(&ctx, tab(), &mut query, &mut other), None);
     }
 }
