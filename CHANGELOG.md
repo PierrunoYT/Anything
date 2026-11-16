@@ -95,6 +95,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Icons in the results, preview pane, sort arrows and status bar (🗀 🗋 ⚡ ⏶ ✔ …) rendered as empty
+  boxes: egui 0.37 only bundles its emoji fonts with the `monochrome_emoji_fonts` feature, which is
+  now enabled. The few characters no bundled font has (`●`, `→`, `↑`, `↓`) are replaced.
 - The deep-chain path query test (FC-12) no longer fails at random in CI: its 500 ms limit sat
   right at the time a glob query takes on a CI runner (520–550 ms). The limit is now 1.5 s, which
   still catches the old quadratic behaviour (about 2 s).
