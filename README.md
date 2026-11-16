@@ -1,4 +1,9 @@
 <p align="center"><img src="assets/logos/logo.png" alt="FindCraft logo: an orange folder with a magnifying glass" width="160"></p>
+
+<h1 align="center">FindCraft</h1>
+
+<p align="center"><strong>Find any file on your computer as fast as you can type.</strong></p>
+
 <p align="center">
   <a href="https://github.com/PierrunoYT/FindCraft/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/PierrunoYT/FindCraft/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
   <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-0078D4" alt="Platforms: Windows | macOS | Linux">
@@ -11,11 +16,6 @@
   <a href="docs/user-guide.md">User guide</a> ·
   <a href="#development">Development</a>
 </p>
-
-
-<h1 align="center">FindCraft</h1>
-
-<p align="center"><strong>Find any file on your computer as fast as you can type.</strong></p>
 
 FindCraft is a free, open-source file search app for Windows, Linux and macOS, in the spirit of
 [Everything](https://www.voidtools.com/) and written in Rust. It indexes every file and folder on
