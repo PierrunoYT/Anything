@@ -65,6 +65,8 @@ All notable changes to this project are documented here. The format follows
   `AGENTS.md` and the README's Contributing section say so.
 - README: removed the Freewright and Discord links.
 - README and user guide: the reveal action is called "Show in folder", matching the app.
+- The hero image shows the FileCraft name and says it runs on Windows, Linux and macOS; it was
+  still the "Pounce" render.
 - README: rewritten with a screenshot, a query example table, a per-platform feature table and
   separate Build and Development sections.
 - `AGENTS.md` now uses the same short guidelines as ConvertCraft.
