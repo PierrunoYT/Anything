@@ -54,6 +54,9 @@ All notable changes to this project are documented here. The format follows
   Open uses `open`, Show in folder selects the item in the Finder (`open -R`), and the external
   editor defaults to `FILECRAFT_EDITOR`, else the default text editor (`open -t`). `windows-sys`
   is now a Windows-only dependency. CI also checks, lints and tests on macOS.
+- The package and GitHub repository descriptions name Windows, Linux and macOS, and the repository
+  has the topics `linux`, `macos`, `cross-platform`, `egui` and `everything`. The package has
+  crates.io keywords and categories.
 
 ### Changed
 
