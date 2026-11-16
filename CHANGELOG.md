@@ -66,6 +66,7 @@ All notable changes to this project are documented here. The format follows
 - README: removed the Freewright and Discord links.
 - README: rewritten with a screenshot, a query example table, a per-platform feature table and
   separate Build and Development sections.
+- `AGENTS.md` now uses the same short guidelines as ConvertCraft.
 - With quick search on (the default), closing the window no longer exits FileCraft: it keeps
   running in the notification area so that the hotkey keeps working. **Exit** (in the File menu or
   the icon's menu) quits, and turning quick search off in Settings restores the old behaviour. The
