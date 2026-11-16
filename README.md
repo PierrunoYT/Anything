@@ -9,6 +9,8 @@ fixed drives and filters millions of entries as you type.
 On Linux and macOS, FileCraft indexes the file system root `/` with the folder scan. Fast NTFS
 indexing, the quick search bar and Properties are Windows-only.
 
+FileCraft is one of the open-source desktop apps from [Pierruno](https://pierruno.dev/).
+
 ## Features
 
 - **Searches all drives at once**, with results sortable by name, path, size and date.
