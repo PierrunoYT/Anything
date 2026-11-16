@@ -6,6 +6,8 @@ Instant file search for Windows: a desktop app in the spirit of
 [Everything](https://www.voidtools.com/), written in Rust. It indexes every file and folder on your
 fixed drives and filters millions of entries as you type.
 
+FileCraft is one of the open-source desktop apps from [Pierruno](https://pierruno.dev/).
+
 ## Features
 
 - **Searches all drives at once**, with results sortable by name, path, size and date.
