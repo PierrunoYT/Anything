@@ -61,7 +61,7 @@ an option yourself in the meantime.
 | --- | --- |
 | `↑` `↓` | Move the selection |
 | `Enter` / click | Open with the default application |
-| `Ctrl+Enter` | Show in Explorer |
+| `Ctrl+Enter` | Show in folder |
 | `Shift+Enter` | Show all results in the main window |
 | `Ctrl+Shift+C` | Copy the full path |
 | `Esc`, the hotkey, or clicking elsewhere | Close the bar |
@@ -176,7 +176,7 @@ Right-click a result, use the preview pane buttons, or the keyboard:
 | --- | --- |
 | `↑` `↓` `PgUp` `PgDn`, `Ctrl+Home` `Ctrl+End` | Move the selection |
 | `Enter` / double-click | Open with the default application |
-| `Ctrl+Enter` | Show in Explorer |
+| `Ctrl+Enter` | Show in folder |
 | `Alt+Enter` | Properties |
 | `F4` | Edit in the preview pane |
 | `Ctrl+S` | Save the file being edited |

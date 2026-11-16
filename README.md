@@ -33,7 +33,7 @@ FileCraft is one of the open-source desktop apps from [Pierruno](https://pierrun
 
 - **Preview and edit.** Text files open in an inline editor (Ctrl+S saves, keeping the encoding and
   line endings); images, hex dumps and folder listings preview too.
-- **Shell actions.** Open, show in Explorer, Properties, copy path, open in an external editor.
+- **Shell actions.** Open, show in folder, Properties, copy path, open in an external editor.
 - **Quick search bar (Windows).** Press **Alt+Space** anywhere for a launcher-style search box that
   ranks programs and close matches first. FileCraft keeps running in the notification area when
   its window is closed.

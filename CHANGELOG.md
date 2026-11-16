@@ -1,5 +1,4 @@
 # Changelog
-- README and user guide: the reveal action is called "Show in folder", matching the app.
 
 All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
@@ -65,6 +64,7 @@ All notable changes to this project are documented here. The format follows
   that required a pull request is removed (force pushes and deleting `main` stay blocked), and
   `AGENTS.md` and the README's Contributing section say so.
 - README: removed the Freewright and Discord links.
+- README and user guide: the reveal action is called "Show in folder", matching the app.
 - README: rewritten with a screenshot, a query example table, a per-platform feature table and
   separate Build and Development sections.
 - `AGENTS.md` now uses the same short guidelines as ConvertCraft.
