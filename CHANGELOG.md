@@ -34,7 +34,7 @@ All notable changes to this project are documented here. The format follows
   only reviewed licenses and crates.io sources. A lint policy in `Cargo.toml` requires
   `// SAFETY:` comments on `unsafe` blocks (MIN-03).
 - CI also runs the tests in the release profile (overflow checks off) and runs every week, so new
-  advisories and yanked crates show up between pull requests. Third-party actions are pinned to
+  advisories and yanked crates show up between pushes. Third-party actions are pinned to
   commit SHAs, and Dependabot proposes updates (MIN-04).
 - Quick search bar: a system-wide hotkey (default Alt+Space, configurable in Settings) opens a small
   always-on-top search box that ranks programs and close name matches first. Enter opens the
@@ -64,10 +64,12 @@ All notable changes to this project are documented here. The format follows
   (%LOCALAPPDATA%\FindCraft, ~/Library/Caches/FindCraft, ~/.cache/findcraft), settings, the
   FINDCRAFT_EDITOR and FINDCRAFT_BENCH_ROOT variables and the repository. Indexes and settings
   from FileCraft are not carried over; the first start rebuilds them.
+- FindCraft is licensed under the GNU General Public License v3.0 or later (it was MIT). The
+  `LICENSE` file, the package's `license` field and the README's License section say so.
 - Changes are pushed straight to `main` instead of going through pull requests. The branch rule
   that required a pull request is removed (force pushes and deleting `main` stay blocked), and
-  `AGENTS.md` and the README's Contributing section say so.
-- README: removed the Freewright and Discord links.
+  `AGENTS.md` and the README's Development section say so.
+- README: removed the Freewright and Discord links, and links to [pierruno.dev](https://pierruno.dev/).
 - README and user guide: the reveal action is called "Show in folder", matching the app.
 - The hero image shows the FindCraft name and says it runs on Windows, Linux and macOS; it was
   still the "Pounce" render.
