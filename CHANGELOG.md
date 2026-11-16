@@ -73,8 +73,8 @@ All notable changes to this project are documented here. The format follows
 - README and user guide: the reveal action is called "Show in folder", matching the app.
 - The hero image shows the FindCraft name and says it runs on Windows, Linux and macOS; it was
   still the "Pounce" render.
-- The hero image's HTML source and renderer (`promo/launch.html`, `render.mjs`, `sound.mjs`) are
-  now in the repository.
+- Only the rendered hero image (`docs/media/findcraft-hero.png`) is in the repository; its HTML
+  source and renderer in `promo/` are kept local.
 - README: rewritten with a screenshot, a query example table, a per-platform feature table and
   separate Build and Development sections.
 - `AGENTS.md` now uses the same short guidelines as ConvertCraft.
