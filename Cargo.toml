@@ -6,8 +6,6 @@ description = "Instant file search for Windows, Linux and macOS: an Everything-s
 keywords = ["file-search", "desktop-app", "everything", "ntfs", "egui"]
 categories = ["filesystem", "gui"]
 license = "GPL-3.0-or-later"
-# egui 0.37 ships its emoji/icon fonts (🗀 🗋 ⚡ ⏶ ✔ …) only with this feature; without it they render as boxes.
-egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 
 [[bin]]
 name = "FindCraft"
@@ -17,6 +15,8 @@ path = "src/main.rs"
 anyhow = "1.0"
 crossbeam-channel = "0.5"
 eframe = { version = "0.37", default-features = false, features = ["accesskit", "default_fonts", "glow", "persistence"] }
+# egui 0.37 ships its emoji/icon fonts (🗀 🗋 ⚡ ⏶ ✔ …) only with this feature; without it they render as boxes.
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
 egui_extras = "0.37"
 globset = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "ico", "gif", "webp"] }
