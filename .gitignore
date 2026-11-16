@@ -1,5 +1,2 @@
 /target
-/promo/*
-!/promo/launch.html
-!/promo/render.mjs
-!/promo/sound.mjs
+/promo/

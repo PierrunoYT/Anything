@@ -107,13 +107,6 @@ To benchmark against a real drive:
 $env:FINDCRAFT_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ignored --nocapture
 ```
 
-The hero image is drawn in HTML (`promo/launch.html`, fictional data). Re-render it with Chrome or
-Edge installed:
-
-```powershell
-node promo/render.mjs docs/media/findcraft-hero.png
-```
-
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds, lints and tests on Windows (debug
 and release), Linux and macOS, and checks dependencies with `cargo deny` (policy in
 [`deny.toml`](deny.toml)) and `cargo audit`. It also runs weekly so new advisories show up between
