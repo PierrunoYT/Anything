@@ -972,6 +972,7 @@ dependencies = [
  "anyhow",
  "crossbeam-channel",
  "eframe",
+ "egui",
  "egui_extras",
  "globset",
  "image",

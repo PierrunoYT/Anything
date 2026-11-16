@@ -1144,7 +1144,7 @@ impl FindCraftApp {
                 } else if self.searching {
                     "Searching…"
                 } else if self.index.volumes.is_empty() {
-                    "No drives indexed. Check File → Settings."
+                    "No drives indexed. Check File > Settings."
                 } else {
                     "No results"
                 };
@@ -1358,7 +1358,7 @@ impl FindCraftApp {
                     ui.spinner();
                     ui.weak("Saving…");
                 } else if dirty {
-                    ui.colored_label(ui.visuals().warn_fg_color, "● modified");
+                    ui.colored_label(ui.visuals().warn_fg_color, "⏺ modified");
                 }
             });
             if let Some(style) = self.preview.as_ref().and_then(|p| p.mixed_newlines_saved_as()) {
@@ -1658,7 +1658,7 @@ impl FindCraftApp {
                     ui.add_space(10.0);
                     ui.strong("Keyboard");
                     let keys: &[(&str, &str)] = &[
-                        ("↑ ↓  PgUp PgDn", "move the selection"),
+                        ("⬆ ⬇  PgUp PgDn", "move the selection"),
                         ("Enter / double-click", "open"),
                         ("Ctrl+Enter", "show in folder"),
                         ("Alt+Enter", "properties"),
