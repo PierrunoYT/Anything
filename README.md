@@ -2,34 +2,57 @@
 
 <h1 align="center">FileCraft</h1>
 
-Instant file search for Windows, Linux and macOS: a desktop app in the spirit of
-[Everything](https://www.voidtools.com/), written in Rust. It indexes every file and folder on your
-fixed drives and filters millions of entries as you type.
+<p align="center"><strong>Find any file on your computer as fast as you can type.</strong></p>
 
-On Linux and macOS, FileCraft indexes the file system root `/` with the folder scan. Fast NTFS
-indexing, the quick search bar and Properties are Windows-only.
+FileCraft is a free, open-source file search app for Windows, Linux and macOS, in the spirit of
+[Everything](https://www.voidtools.com/) and written in Rust. It indexes every file and folder on
+your drives once, keeps the index cached, and filters millions of entries on every keystroke.
 
 FileCraft is one of the open-source desktop apps from [Pierruno](https://pierruno.dev/).
 
+<p align="center"><img src="docs/media/filecraft-hero.png" alt="FileCraft main window showing search results"></p>
+
 ## Features
 
-- **Searches all drives at once**, with results sortable by name, path, size and date.
-- **NTFS MFT indexing**: with **⚡ Fast NTFS indexing** on, a small elevated helper reads each
-  drive's master file table directly, which indexes a drive in seconds; the window itself never
-  needs administrator rights. Otherwise it uses a parallel folder scan.
-- **Instant startup**: indexes are cached on disk and refreshed in the background.
-- **Everything-style queries**: `ext:pdf`, `size:>100mb`, `dm:today`, `folder:src`, wildcards,
-  `!not`, `a|b`, path terms and `regex:`.
-- **Preview and edit**: text with an inline editor (Ctrl+S to save; encoding and line endings
-  kept), images, hex dumps and folder listings.
-- **Shell actions**: open, show in Explorer, Properties, copy path and external editor.
-- **Quick search bar**: press **Alt+Space** anywhere for a small launcher-style search box that
-  ranks programs and close matches first. FileCraft stays in the notification area when its window
-  is closed.
+- **All drives, one search box.** Results sort by name, path, size or date.
+- **Fast NTFS indexing (Windows).** Turn on **⚡ Fast NTFS indexing** and a small elevated helper
+  reads each drive's master file table directly, indexing a drive in seconds. The main window never
+  needs administrator rights; without the helper, FileCraft uses a parallel folder scan.
+- **Instant startup.** Indexes are cached on disk and refreshed in the background.
+- **Everything-style queries.** Combine filters, wildcards and operators:
+
+  | Query | Finds |
+  | --- | --- |
+  | `ext:pdf invoice` | PDFs with "invoice" in the name |
+  | `size:>100mb` | files larger than 100 MB |
+  | `dm:today` | files modified today |
+  | `folder:src` | folders whose name contains `src` |
+  | `report !draft` | "report" but not "draft" |
+  | `jpg\|png` | either term |
+  | `regex:^\d{4}-` | names matching a regular expression |
+
+- **Preview and edit.** Text files open in an inline editor (Ctrl+S saves, keeping the encoding and
+  line endings); images, hex dumps and folder listings preview too.
+- **Shell actions.** Open, show in Explorer, Properties, copy path, open in an external editor.
+- **Quick search bar (Windows).** Press **Alt+Space** anywhere for a launcher-style search box that
+  ranks programs and close matches first. FileCraft keeps running in the notification area when
+  its window is closed.
+
+## Platforms
+
+| | Windows | Linux | macOS |
+| --- | :---: | :---: | :---: |
+| Folder scan indexing | ✓ | ✓ (from `/`) | ✓ (from `/`) |
+| Fast NTFS indexing | ✓ | | |
+| Quick search bar | ✓ | | |
+| Properties dialog | ✓ | | |
+| Search, preview, editing | ✓ | ✓ | ✓ |
+
+## Performance
 
 Measured on a machine with 7 drives and 13 million files, without admin rights:
 
-| | |
+| Task | Time / size |
 | --- | --- |
 | Folder scan of a 4.2 M-entry SSD | 18.7 s |
 | Load that drive from cache | 0.35 s |
@@ -37,47 +60,40 @@ Measured on a machine with 7 drives and 13 million files, without admin rights:
 | All 13 M entries, unfiltered | 35 ms |
 | Memory use | ~1.6 GB |
 
-## Build & run
+## Build and run
+
+You need a recent stable [Rust toolchain](https://rustup.rs/).
+
+**Windows**
 
 ```powershell
 cargo build --release
 .\target\release\FileCraft.exe
 ```
 
-Click **⚡ Fast NTFS indexing** in the status bar for MFT indexing (one UAC prompt for the helper).
+Click **⚡ Fast NTFS indexing** in the status bar to switch to MFT indexing (one UAC prompt for the
+helper).
 
-On Linux, building needs the Wayland and xkbcommon development files (on Debian and Ubuntu:
-`sudo apt install pkg-config libwayland-dev libxkbcommon-dev`):
+**Linux** needs the Wayland and xkbcommon development files (Debian/Ubuntu:
+`sudo apt install pkg-config libwayland-dev libxkbcommon-dev`). **macOS** needs nothing extra.
 
 ```sh
 cargo build --release
 ./target/release/FileCraft
 ```
 
-On macOS, the same two commands work without extra packages.
-
-```powershell
-cargo test                                                        # unit tests
-$env:FILECRAFT_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ignored --nocapture
-```
-
 ## Documentation
 
-- [User guide](docs/user-guide.md): window, search syntax, editing, shortcuts, settings
-- [Architecture](docs/architecture.md): index layout, MFT reader, search engine
+- [User guide](docs/user-guide.md): the window, search syntax, editing, shortcuts and settings
+- [Architecture](docs/architecture.md): index layout, MFT reader and search engine
 - [Changelog](CHANGELOG.md)
 
-## Contributing
+## Development
 
-Changes are committed and pushed straight to `main`, one commit per fix; no pull request or
-review is needed. Force pushes to `main` and deleting it are blocked.
+Changes are committed and pushed straight to `main`, one commit per fix; no pull request or review
+is needed. Force pushes to `main` and deleting it are blocked.
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds, lints (`clippy -D warnings`)
-and tests on Windows in both the debug and release profiles and on Linux and macOS, and checks dependencies with
-`cargo deny check` (policy in [`deny.toml`](deny.toml)) and `cargo audit`. It also runs weekly, so
-new advisories show up between pushes. Third-party actions are pinned to commit SHAs, and
-both they and the crates in `Cargo.lock` are kept current by Dependabot. Run the same checks
-locally before pushing:
+Run the same checks as CI before pushing:
 
 ```powershell
 cargo clippy --locked --all-targets -- -D warnings
@@ -85,12 +101,19 @@ cargo test --locked
 cargo deny check
 ```
 
+To benchmark against a real drive:
+
+```powershell
+$env:FILECRAFT_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ignored --nocapture
+```
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds, lints and tests on Windows (debug
+and release), Linux and macOS, and checks dependencies with `cargo deny` (policy in
+[`deny.toml`](deny.toml)) and `cargo audit`. It also runs weekly so new advisories show up between
+pushes. Third-party actions are pinned to commit SHAs; Dependabot keeps them and the crates in
+`Cargo.lock` current.
+
 ## License
 
-FileCraft is free software: you can redistribute it and/or modify it under the terms of the
-[GNU General Public License](LICENSE) as published by the Free Software Foundation, either
-version 3 of the License, or (at your option) any later version.
-
-FileCraft is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
-even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-[LICENSE](LICENSE) file for details.
+FileCraft is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE).
+It comes with no warranty; see [LICENSE](LICENSE) for details.
