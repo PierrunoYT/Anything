@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { synthesize, wav } from "./sound.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const out = resolve(process.argv[2] ?? join(here, "..", "docs", "media", "filecraft-launch.mp4"));
+const out = resolve(process.argv[2] ?? join(here, "..", "docs", "media", "findcraft-launch.mp4"));
 const still = out.toLowerCase().endsWith(".png");
 const fps = Number(process.argv[3] ?? 60);
 const stillAt = Number(process.argv[3] ?? 9.4);
@@ -25,7 +25,7 @@ const browser = [
 ].find((p) => p && existsSync(p));
 if (!browser) throw new Error("Chrome or Edge not found; set CHROME to its path");
 
-const profile = mkdtempSync(join(tmpdir(), "filecraft-render-"));
+const profile = mkdtempSync(join(tmpdir(), "findcraft-render-"));
 const chrome = spawn(browser, [
   "--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`,
   `--window-size=${W},${H}`, "--force-device-scale-factor=1", "--hide-scrollbars",

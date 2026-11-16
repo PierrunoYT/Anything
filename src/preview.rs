@@ -26,7 +26,7 @@ const IMAGE_MAX_SIDE: u32 = 16_384;
 const IMAGE_MAX_ALLOC: u64 = 256 * 1024 * 1024;
 /// Decoded images are scaled down to fit this square before they reach the UI.
 const IMAGE_PREVIEW_SIDE: u32 = 2048;
-/// Backups left in the backup folder this long are deleted when FileCraft starts.
+/// Backups left in the backup folder this long are deleted when FindCraft starts.
 const STALE_BACKUP: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 pub enum Content {
@@ -650,7 +650,7 @@ fn backup_dir() -> PathBuf {
     if cfg!(test) {
         // One folder for every test run: backup names already carry the process id, and each
         // backup is deleted when its save completes, so nothing builds up between runs (MIN-04).
-        std::env::temp_dir().join("filecraft-test-backup")
+        std::env::temp_dir().join("findcraft-test-backup")
     } else {
         crate::index::data_dir().join("backup")
     }
@@ -807,7 +807,7 @@ mod tests {
     /// Writes a fixture. The folder is shared by every run and each name belongs to one test, so
     /// a run overwrites the files of the last one instead of leaving a new folder behind.
     fn temp(name: &str, bytes: &[u8]) -> PathBuf {
-        let dir = std::env::temp_dir().join("filecraft-test-preview");
+        let dir = std::env::temp_dir().join("findcraft-test-preview");
         fs::create_dir_all(&dir).unwrap();
         let p = dir.join(name);
         fs::write(&p, bytes).unwrap();
@@ -897,7 +897,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn backups_do_not_write_through_junctions() {
-        let dir = std::env::temp_dir().join(format!("filecraft-backup-junction-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-backup-junction-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let target = dir.join("target");
         fs::create_dir_all(&target).unwrap();
@@ -915,7 +915,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn trailing_dot_names_are_previewed_and_saved_themselves() {
-        let dir = std::env::temp_dir().join(format!("filecraft-preview-dots-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-preview-dots-{}", std::process::id()));
         let vdir = crate::util::fs_path(&dir.to_string_lossy());
         fs::create_dir_all(&vdir).unwrap();
         fs::write(vdir.join("report.txt"), "OTHER").unwrap();
@@ -1062,7 +1062,7 @@ mod tests {
     #[test]
     fn failed_write_keeps_a_copy_of_the_original() {
         let path = temp("failed-write.txt", b"original");
-        let dir = std::env::temp_dir().join(format!("filecraft-backup-failed-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-backup-failed-{}", std::process::id()));
         // A read-only handle makes both the write and the restore fail.
         let mut file = fs::File::open(&path).unwrap();
         let err = write_in_place(&mut file, "failed-write.txt", b"new content", &dir).unwrap_err();
@@ -1077,7 +1077,7 @@ mod tests {
     #[test]
     fn successful_saves_leave_no_backup() {
         let path = temp("no-backup.txt", b"before");
-        let dir = std::env::temp_dir().join(format!("filecraft-backup-ok-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-backup-ok-{}", std::process::id()));
         let mut file = open_for_save(&path).unwrap();
         write_in_place(&mut file, "no-backup.txt", b"after, and longer", &dir).unwrap();
         drop(file);
@@ -1090,7 +1090,7 @@ mod tests {
     /// Week-old ones are now swept at startup; recent ones may still be needed and stay.
     #[test]
     fn stale_backups_are_swept() {
-        let dir = std::env::temp_dir().join(format!("filecraft-backup-sweep-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-backup-sweep-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let old = dir.join("1-0-old.txt");
@@ -1112,7 +1112,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn backup_sweep_does_not_follow_junctions() {
-        let dir = std::env::temp_dir().join(format!("filecraft-backup-sweep-junction-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-backup-sweep-junction-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let target = dir.join("target");
         fs::create_dir_all(&target).unwrap();
@@ -1200,7 +1200,7 @@ mod tests {
     /// listing stops as soon as a newer preview is requested.
     #[test]
     fn folder_listing_is_bounded_and_cancellable() {
-        let dir = std::env::temp_dir().join(format!("filecraft-preview-big-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-preview-big-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("Zed folder")).unwrap();
         for i in 0..DIR_LIMIT + 5 {

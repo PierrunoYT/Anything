@@ -86,7 +86,7 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
 - **macOS** — the same single `/` volume as Linux. `walk::PSEUDO_FOLDERS` skips `/System/Volumes`
   (its `Data` volume is firmlinked to `/Users`, `/Applications` and so on, so walking it would
   index every user file twice) and `/dev`. `actions` uses `/usr/bin/open` (and `open -R` to reveal),
-  and the cache is under `~/Library/Caches/FileCraft`. `windows-sys` is a Windows-only dependency.
+  and the cache is under `~/Library/Caches/FindCraft`. `windows-sys` is a Windows-only dependency.
 - **Indexer** (`indexer.rs`) — one thread per drive: load the cache and publish it, then rebuild
   if the cache is missing or too old (MFT for NTFS drives when the helper runs or the window
   itself is elevated, else walk, with walk as the fallback when the MFT read fails or panics),
@@ -94,9 +94,9 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   atomics that the status bar reads.
 - **NTFS helper** (`mft_helper.rs`) — the window never needs administrator rights.
   - **Start.** *Fast NTFS indexing* creates a named pipe with a random name, single instance
-    (`FILE_FLAG_FIRST_PIPE_INSTANCE`) and local only, then starts `FileCraft.exe --mft-helper
+    (`FILE_FLAG_FIRST_PIPE_INSTANCE`) and local only, then starts `FindCraft.exe --mft-helper
     <pipe>` with the `runas` verb.
-  - **Connect.** The helper accepts only FileCraft's pipe names. It opens the pipe with
+  - **Connect.** The helper accepts only FindCraft's pipe names. It opens the pipe with
     `SECURITY_IDENTIFICATION`, so whoever serves the pipe cannot impersonate its elevated token.
     The window checks the client's process id (`GetNamedPipeClientProcessId`) against the
     helper it started; any other client is disconnected and the window keeps waiting.
@@ -111,8 +111,8 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
 
 ## Cache format
 
-`%LOCALAPPDATA%\FileCraft\index\<letter>.idx` (on Linux `$XDG_CACHE_HOME/filecraft/index/root.idx`,
-by default under `~/.cache`; on macOS `~/Library/Caches/FileCraft/index/root.idx`), little-endian:
+`%LOCALAPPDATA%\FindCraft\index\<letter>.idx` (on Linux `$XDG_CACHE_HOME/findcraft/index/root.idx`,
+by default under `~/.cache`; on macOS `~/Library/Caches/FindCraft/index/root.idx`), little-endian:
 magic and version, drive letter (`/` on Linux and macOS),
 source, build time, both name arenas, the entry table and the four sort orders.
 
@@ -120,7 +120,7 @@ Each save writes and syncs its own staging file, `<letter>.<pid>-<n>.tmp`, creat
 concurrent saves never share one, and renames it into place, so readers always see a whole
 snapshot. The rename is skipped in two cases: the indexing job was superseded (checked under a
 process-wide lock, together with the rename), or the cache already holds a snapshot built later,
-for example by another FileCraft instance. The newest snapshot wins. Staging files more than an
+for example by another FindCraft instance. The newest snapshot wins. Staging files more than an
 hour old are leftovers from a crash and are deleted.
 
 Loading reads at most 4 GiB and checks everything

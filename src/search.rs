@@ -876,7 +876,7 @@ impl Searcher {
                 hits: Arc::new(Vec::new()),
                 sort,
                 top: Vec::new(),
-                error: Some("Searching stopped working. Restart FileCraft.".into()),
+                error: Some("Searching stopped working. Restart FindCraft.".into()),
                 elapsed: Duration::ZERO,
             });
         }

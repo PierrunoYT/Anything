@@ -1,7 +1,7 @@
 # cargo-deny policy: `cargo deny check` (run in CI).
 
 [graph]
-# FileCraft is a Windows application. Checking only the Windows graph keeps the Unix-only
+# FindCraft is a Windows application. Checking only the Windows graph keeps the Unix-only
 # accessibility tree out: zbus_names, zvariant and zvariant_derive (RUSTSEC-2026-0370, -0371,
 # -0372, unmaintained since the zbus 6 merge) are in Cargo.lock but never built for Windows. If an
 # eframe/accesskit release moves to zbus 6, `cargo update` drops them from the lockfile too.
@@ -14,7 +14,7 @@ yanked = "deny"
 ignore = []
 
 [licenses]
-# Reviewed permissive licenses, all compatible with FileCraft's GPL-3.0-or-later. Crates that
+# Reviewed permissive licenses, all compatible with FindCraft's GPL-3.0-or-later. Crates that
 # offer a choice (for example `Apache-2.0 OR GPL-2.0-only` in self_cell) pass through one of these.
 allow = [
     "0BSD",
@@ -31,8 +31,8 @@ allow = [
 confidence-threshold = 0.9
 
 [[licenses.exceptions]]
-# FileCraft itself.
-crate = "filecraft"
+# FindCraft itself.
+crate = "findcraft"
 allow = ["GPL-3.0-or-later"]
 
 [[licenses.exceptions]]

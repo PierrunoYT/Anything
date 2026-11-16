@@ -574,16 +574,16 @@ const MAX_CACHE_ENTRIES: usize = 64 << 20;
 /// Serialized size of one [`Entry`].
 const ENTRY_BYTES: usize = 36;
 
-/// `%LOCALAPPDATA%\FileCraft` on Windows, `~/Library/Caches/FileCraft` on macOS, elsewhere
-/// `$XDG_CACHE_HOME/filecraft`, by default `~/.cache/filecraft`, rather than the shared temporary
+/// `%LOCALAPPDATA%\FindCraft` on Windows, `~/Library/Caches/FindCraft` on macOS, elsewhere
+/// `$XDG_CACHE_HOME/findcraft`, by default `~/.cache/findcraft`, rather than the shared temporary
 /// folder other users can write to.
 pub fn data_dir() -> PathBuf {
     #[cfg(windows)]
-    let (base, name) = (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "FileCraft");
+    let (base, name) = (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "FindCraft");
     #[cfg(target_os = "macos")]
     let (base, name) = (
         std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library").join("Caches")),
-        "FileCraft",
+        "FindCraft",
     );
     #[cfg(not(any(windows, target_os = "macos")))]
     let (base, name) = (
@@ -591,7 +591,7 @@ pub fn data_dir() -> PathBuf {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache"))),
-        "filecraft",
+        "findcraft",
     );
     base.unwrap_or_else(std::env::temp_dir).join(name)
 }
@@ -612,7 +612,7 @@ pub fn ensure_own_dir(dir: &Path) -> io::Result<()> {
         first = false;
         if is_reparse_point(&fs::symlink_metadata(d)?) {
             return Err(io::Error::other(format!(
-                "{} is a link or junction; FileCraft does not write through it",
+                "{} is a link or junction; FindCraft does not write through it",
                 d.display()
             )));
         }
@@ -917,7 +917,7 @@ fn remove_stale_staging(dir: &Path, stem: &str) {
     }
 }
 
-/// Build time (seconds since 1970) recorded in the cache at `path`, if it is a FileCraft cache.
+/// Build time (seconds since 1970) recorded in the cache at `path`, if it is a FindCraft cache.
 /// A stamp further ahead of the clock than [`CLOCK_SKEW_SECS`] is not a newer snapshot (clock
 /// skew or corruption), so it is reported as absent and cannot block the save (FC-11).
 fn cached_build_secs(path: &Path) -> Option<u64> {
@@ -1141,7 +1141,7 @@ pub mod tests {
     #[test]
     fn cache_round_trip() {
         let v = sample();
-        let path = std::env::temp_dir().join(format!("filecraft-test-{}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("findcraft-test-{}.idx", std::process::id()));
         v.save(&path).unwrap();
         let loaded = VolumeIndex::load(&path, 'C').unwrap();
         let _ = fs::remove_file(&path);
@@ -1156,7 +1156,7 @@ pub mod tests {
         // Tests run in parallel, so every call gets its own file.
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("filecraft-test-bytes-{}-{n}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("findcraft-test-bytes-{}-{n}.idx", std::process::id()));
         v.save(&path).unwrap();
         let bytes = fs::read(&path).unwrap();
         let _ = fs::remove_file(&path);
@@ -1165,7 +1165,7 @@ pub mod tests {
 
     /// Loads `bytes` as a cache of drive `letter` and returns the error it must produce.
     fn load_error(label: &str, bytes: &[u8], letter: char) -> io::Error {
-        let path = std::env::temp_dir().join(format!("filecraft-test-{label}-{}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("findcraft-test-{label}-{}.idx", std::process::id()));
         fs::write(&path, bytes).unwrap();
         let result = VolumeIndex::load(&path, letter);
         let _ = fs::remove_file(&path);
@@ -1338,7 +1338,7 @@ pub mod tests {
         assert_eq!(v.entry(0).size, 7, "folder sizes reach the root");
         assert_eq!(v.by_path, (1..=file).collect::<Vec<_>>());
 
-        let path = std::env::temp_dir().join(format!("filecraft-test-deep-{}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("findcraft-test-deep-{}.idx", std::process::id()));
         v.save(&path).unwrap();
         let loaded = VolumeIndex::load(&path, 'C');
         let _ = fs::remove_file(&path);
@@ -1355,7 +1355,7 @@ pub mod tests {
     }
 
     fn cache_dir(label: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("filecraft-test-{label}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-test-{label}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

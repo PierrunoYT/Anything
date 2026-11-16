@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>FileCraft launch</title>
+<title>FindCraft launch</title>
 <style>
   :root {
     --bg: #100b0a;
@@ -125,14 +125,14 @@
   <!-- Scene 1: intro -->
   <div class="layer" id="intro">
     <svg class="icon" id="introIcon" viewBox="0 0 256 256"></svg>
-    <div class="wordmark" id="introWord">FileCraft</div>
+    <div class="wordmark" id="introWord">FindCraft</div>
     <div class="tagline" id="introTag"><b>Instant file search</b> for Windows</div>
   </div>
 
   <!-- Scene 2: the app -->
   <div class="caption" id="caption"></div>
   <div class="window" id="win">
-    <div class="titlebar"><svg viewBox="0 0 256 256" id="tbIcon"></svg>FileCraft<div class="ctl"><span>—</span><span>☐</span><span>✕</span></div></div>
+    <div class="titlebar"><svg viewBox="0 0 256 256" id="tbIcon"></svg>FindCraft<div class="ctl"><span>—</span><span>☐</span><span>✕</span></div></div>
     <div class="menubar"><span>File</span><span>Search</span><span>View</span><span>Help</span></div>
     <div class="searchrow">
       <div class="search" id="search"></div>
@@ -162,8 +162,8 @@
   <!-- Scene 4: outro -->
   <div class="layer outro" id="outro">
     <svg class="icon" id="outroIcon" viewBox="0 0 256 256"></svg>
-    <div class="wordmark" id="outroWord">FileCraft</div>
-    <div class="pill" id="outroPill">github.com/freewright-dev/FileCraft</div>
+    <div class="wordmark" id="outroWord">FindCraft</div>
+    <div class="pill" id="outroPill">github.com/PierrunoYT/FindCraft</div>
     <div class="sub" id="outroSub">Free and open source · GPL-3.0</div>
   </div>
 </div>
@@ -175,7 +175,7 @@ for (const id of ["introIcon", "outroIcon", "tbIcon"]) document.getElementById(i
 
 const TOTAL = 15;
 const HERO = location.hash.includes("hero");
-const HERO_CAPTION = `<svg class="cap-icon" viewBox="0 0 256 256">${ICON}</svg>FileCraft<span class="dim"> · </span><span>Instant</span> file search for Windows, Linux and macOS`;
+const HERO_CAPTION = `<svg class="cap-icon" viewBox="0 0 256 256">${ICON}</svg>FindCraft<span class="dim"> · </span><span>Instant</span> file search for Windows, Linux and macOS`;
 const TOTAL_OBJECTS = "13,042,118";
 
 // Fictional results: nothing here comes from a real machine.
@@ -215,15 +215,15 @@ const QUERIES = [
     text: "folder:src *.rs", start: 7.45, caption: 'Preview and <span>edit</span> in place.',
     count: "214", ms: "24 ms", select: 0,
     rows: [
-      ["app.rs", "D:\\Code\\filecraft\\src", "48.6 KB", "2026-10-14 13:59"],
-      ["index.rs", "D:\\Code\\filecraft\\src", "26.1 KB", "2026-10-14 13:59"],
+      ["app.rs", "D:\\Code\\findcraft\\src", "48.6 KB", "2026-10-14 13:59"],
+      ["index.rs", "D:\\Code\\findcraft\\src", "26.1 KB", "2026-10-14 13:59"],
       ["lib.rs", "D:\\Code\\raytracer\\src", "3.2 KB", "2026-08-03 11:26"],
-      ["main.rs", "D:\\Code\\filecraft\\src", "1.9 KB", "2026-10-14 14:31"],
+      ["main.rs", "D:\\Code\\findcraft\\src", "1.9 KB", "2026-10-14 14:31"],
       ["main.rs", "D:\\Code\\raytracer\\src", "1.4 KB", "2026-08-03 11:26"],
-      ["mft.rs", "D:\\Code\\filecraft\\src", "17.3 KB", "2026-10-14 13:59"],
+      ["mft.rs", "D:\\Code\\findcraft\\src", "17.3 KB", "2026-10-14 13:59"],
       ["parser.rs", "D:\\Code\\toml-lite\\src", "11.8 KB", "2026-05-19 22:10"],
-      ["search.rs", "D:\\Code\\filecraft\\src", "29.4 KB", "2026-10-14 13:59"],
-      ["walk.rs", "D:\\Code\\filecraft\\src", "6.7 KB", "2026-10-14 13:59"],
+      ["search.rs", "D:\\Code\\findcraft\\src", "29.4 KB", "2026-10-14 13:59"],
+      ["walk.rs", "D:\\Code\\findcraft\\src", "6.7 KB", "2026-10-14 13:59"],
     ],
   },
 ];
@@ -235,14 +235,14 @@ const PREVIEW_CODE =
 <span class="k">use</span> crate::search::{Query, SearchOptions};
 <span class="k">use</span> eframe::egui;
 
-<span class="k">pub struct</span> FileCraftApp {
+<span class="k">pub struct</span> FindCraftApp {
     query: String,
     options: SearchOptions,
     results: Vec&lt;Hit&gt;,
     selected: Option&lt;usize&gt;,
 }
 
-<span class="k">impl</span> FileCraftApp {
+<span class="k">impl</span> FindCraftApp {
     <span class="k">pub fn</span> new(cc: &amp;CreationContext) -&gt; Self {`;
 
 // ---------- timing helpers ----------

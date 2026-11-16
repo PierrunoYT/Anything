@@ -58,7 +58,7 @@ struct EditorConfirm {
 enum CloseStep {
     Exit,
     Hide,
-    /// Say once that FileCraft keeps running, before hiding for the first time.
+    /// Say once that FindCraft keeps running, before hiding for the first time.
     NoticeThenHide,
 }
 
@@ -170,7 +170,7 @@ enum RowAction {
     CopyName,
 }
 
-pub struct FileCraftApp {
+pub struct FindCraftApp {
     indexer: Indexer,
     searcher: Searcher,
     drives: Vec<Drive>,
@@ -249,7 +249,7 @@ pub struct FileCraftApp {
     tz_offset: i64,
 }
 
-impl FileCraftApp {
+impl FindCraftApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let get = |key: &str| cc.storage.and_then(|s| s.get_string(key));
         let editor = get(KEY_EDITOR).filter(|s| !s.trim().is_empty()).unwrap_or_else(actions::default_editor);
@@ -290,7 +290,7 @@ impl FileCraftApp {
             shell_errors.0.clone(),
         )));
 
-        let mut app = FileCraftApp {
+        let mut app = FindCraftApp {
             indexer,
             searcher,
             drives,
@@ -413,7 +413,7 @@ impl FileCraftApp {
         }
     }
 
-    /// Says once, the first time closing the window would hide it, that FileCraft keeps running and
+    /// Says once, the first time closing the window would hide it, that FindCraft keeps running and
     /// how to quit. It is a dialog rather than a tray balloon, because Windows drops those silently
     /// while notifications are off, which would use up the only time this is shown.
     fn close_notice_modal(&mut self, ctx: &egui::Context) {
@@ -424,9 +424,9 @@ impl FileCraftApp {
         let mut exit = false;
         let modal = egui::Modal::new(egui::Id::unique("close-notice")).show(ctx, |ui| {
             ui.set_width(440.0);
-            ui.heading("FileCraft keeps running");
+            ui.heading("FindCraft keeps running");
             ui.label(format!(
-                "Closing the window keeps FileCraft in the notification area, so {} can open quick search from anywhere.",
+                "Closing the window keeps FindCraft in the notification area, so {} can open quick search from anywhere.",
                 self.hotkey
             ));
             if let Some(err) = &self.hotkey_error {
@@ -1122,7 +1122,7 @@ impl FileCraftApp {
                         .add_enabled(self.helper_start.is_none(), egui::Button::new("⚡ Fast NTFS indexing").small())
                         .on_hover_text(
                             "Starts a small helper with administrator rights (one UAC prompt) that reads the NTFS master \
-                             file table: indexing takes seconds instead of minutes. FileCraft itself keeps running without them.",
+                             file table: indexing takes seconds instead of minutes. FindCraft itself keeps running without them.",
                         )
                         .clicked()
                 {
@@ -1489,7 +1489,7 @@ impl FileCraftApp {
         let modal = egui::Modal::new(egui::Id::unique("confirm-elevated-editor")).show(ctx, |ui| {
             ui.set_width(420.0);
             ui.heading("Run the editor as administrator?");
-            ui.label("FileCraft is running as administrator, so the external editor would too.");
+            ui.label("FindCraft is running as administrator, so the external editor would too.");
             ui.add_space(4.0);
             ui.label(RichText::new(&confirm.command).monospace());
             match &confirm.program {
@@ -1567,7 +1567,7 @@ impl FileCraftApp {
                     ui.strong("Quick search");
                     quick_toggled = ui
                         .checkbox(&mut self.quick_search, "Search from anywhere with a hotkey")
-                        .on_hover_text("Closing the window then keeps FileCraft running in the notification area; use Exit to quit.")
+                        .on_hover_text("Closing the window then keeps FindCraft running in the notification area; use Exit to quit.")
                         .changed();
                     ui.add_enabled_ui(self.quick_search, |ui| {
                         ui.horizontal(|ui| {
@@ -1842,7 +1842,7 @@ fn decode_sort(s: &str) -> Sort {
     Sort { key, descending: dir == "desc" }
 }
 
-impl eframe::App for FileCraftApp {
+impl eframe::App for FindCraftApp {
     /// Also runs while the window is hidden, when `ui` does not: everything that has to keep going
     /// then (the tray icon, indexing for the bar, closing) belongs here.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {

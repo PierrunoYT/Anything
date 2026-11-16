@@ -230,7 +230,7 @@ mod platform {
         TranslateMessage, WM_APP, WM_CLOSE, WM_CONTEXTMENU, WM_DESTROY, WM_HOTKEY, WM_NULL, WNDCLASSW, WS_OVERLAPPED,
     };
 
-    const CLASS_NAME: &str = "FileCraftBackgroundWindow";
+    const CLASS_NAME: &str = "FindCraftBackgroundWindow";
     const HOTKEY_ID: i32 = 1;
     const TRAY_ID: u32 = 1;
     const WM_TRAY: u32 = WM_APP + 1;
@@ -421,7 +421,7 @@ mod platform {
         data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
         data.uCallbackMessage = WM_TRAY;
         data.hIcon = small_icon();
-        for (slot, unit) in data.szTip.iter_mut().zip("FileCraft".encode_utf16()) {
+        for (slot, unit) in data.szTip.iter_mut().zip("FindCraft".encode_utf16()) {
             *slot = unit;
         }
         // SAFETY: `data` is fully initialized for the flags it sets, and the version is the union
@@ -452,7 +452,7 @@ mod platform {
     }
 
     fn tray_menu(hwnd: HWND, (x, y): (i32, i32)) {
-        let items = [(MENU_OPEN, "Open FileCraft"), (MENU_SEARCH, "Quick search"), (MENU_EXIT, "Exit")];
+        let items = [(MENU_OPEN, "Open FindCraft"), (MENU_SEARCH, "Quick search"), (MENU_EXIT, "Exit")];
         // SAFETY: the strings outlive the calls that read them. Taking the foreground first is what
         // Windows requires for the menu to close when the user clicks elsewhere, and the posted
         // message is its documented companion. The menu is destroyed on this thread.
@@ -651,7 +651,7 @@ mod platform {
         }
     }
 
-    /// If FileCraft is already running in the background, asks it to show its window and returns
+    /// If FindCraft is already running in the background, asks it to show its window and returns
     /// `true`. Otherwise a second start would quietly load every index a second time.
     pub fn activate_running_instance() -> bool {
         let class = wide(CLASS_NAME);

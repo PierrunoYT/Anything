@@ -155,8 +155,8 @@ pub fn reveal(path: &Path) -> io::Result<()> {
     }
 }
 
-/// `%SystemRoot%\explorer.exe`. A bare `explorer` is looked up in FileCraft's own folder before
-/// System32 and `PATH`, so an `explorer.exe` next to a portable `FileCraft.exe` would run instead.
+/// `%SystemRoot%\explorer.exe`. A bare `explorer` is looked up in FindCraft's own folder before
+/// System32 and `PATH`, so an `explorer.exe` next to a portable `FindCraft.exe` would run instead.
 #[cfg(windows)]
 fn explorer_exe() -> io::Result<std::path::PathBuf> {
     use std::os::windows::ffi::OsStringExt;
@@ -197,12 +197,12 @@ pub fn properties(path: &Path) -> io::Result<()> {
     }
 }
 
-/// The editor command: `FILECRAFT_EDITOR`, `VISUAL`, `EDITOR`, else Notepad. Elsewhere `VISUAL`
+/// The editor command: `FINDCRAFT_EDITOR`, `VISUAL`, `EDITOR`, else Notepad. Elsewhere `VISUAL`
 /// and `EDITOR` usually name terminal editors, which show nothing when started from a window, so
-/// the fallback after `FILECRAFT_EDITOR` is the default text editor on macOS (`open -t`) and the
+/// the fallback after `FINDCRAFT_EDITOR` is the default text editor on macOS (`open -t`) and the
 /// desktop's default application (`xdg-open`) elsewhere.
 pub fn default_editor() -> String {
-    let vars: &[&str] = if cfg!(windows) { &["FILECRAFT_EDITOR", "VISUAL", "EDITOR"] } else { &["FILECRAFT_EDITOR"] };
+    let vars: &[&str] = if cfg!(windows) { &["FINDCRAFT_EDITOR", "VISUAL", "EDITOR"] } else { &["FINDCRAFT_EDITOR"] };
     let fallback = if cfg!(windows) {
         "notepad"
     } else if cfg!(target_os = "macos") {
@@ -402,7 +402,7 @@ mod tests {
         assert!(select_arg(Path::new(r#"C:\dir\a" /root,"C:\Windows"#)).is_err());
     }
 
-    /// Show in folder ran a bare `explorer`, which an `explorer.exe` next to FileCraft overrides.
+    /// Show in folder ran a bare `explorer`, which an `explorer.exe` next to FindCraft overrides.
     #[cfg(windows)]
     #[test]
     fn explorer_is_started_from_the_windows_folder() {
@@ -416,7 +416,7 @@ mod tests {
     fn resolves_bare_names_on_path() {
         let cmd = resolve_program("cmd").unwrap();
         assert!(cmd.file_name().unwrap().eq_ignore_ascii_case("cmd.exe"), "{}", cmd.display());
-        assert!(resolve_program("filecraft-no-such-editor").is_err());
+        assert!(resolve_program("findcraft-no-such-editor").is_err());
     }
 
     /// Empty and relative `PATH` entries, and relative editor paths, used to be resolved against
@@ -425,7 +425,7 @@ mod tests {
     #[test]
     fn never_resolves_against_the_current_directory() {
         use std::ffi::OsString;
-        let rel = format!(r"target\filecraft-relative-path-{}", std::process::id());
+        let rel = format!(r"target\findcraft-relative-path-{}", std::process::id());
         let dir = std::env::current_dir().unwrap().join(&rel);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("planted.cmd"), "@echo off\r\n").unwrap();
@@ -446,7 +446,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn file_name_cannot_inject_commands() {
-        let dir = std::env::temp_dir().join(format!("filecraft-editor-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-editor-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let shim = dir.join("shim.cmd");
         std::fs::write(&shim, "@echo off\r\n>\"%~dp0args.txt\" echo(%*\r\n").unwrap();
@@ -472,12 +472,12 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn launches_the_program_that_was_resolved() {
-        let dir = std::env::temp_dir().join(format!("filecraft-editor-resolved-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-editor-resolved-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let shim = dir.join("shim.cmd");
         std::fs::write(&shim, "@echo off\r\n>\"%~dp0args.txt\" echo(%*\r\n").unwrap();
 
-        let status = editor_command(&shim, "filecraft-no-such-editor -n", Path::new("file.txt")).status().unwrap();
+        let status = editor_command(&shim, "findcraft-no-such-editor -n", Path::new("file.txt")).status().unwrap();
         let args = std::fs::read_to_string(dir.join("args.txt"));
         let _ = std::fs::remove_dir_all(&dir);
 

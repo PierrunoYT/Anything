@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn walks_a_directory_tree() {
-        let root = std::env::temp_dir().join(format!("filecraft-walk-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("findcraft-walk-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("a").join("b")).unwrap();
         std::fs::write(root.join("a").join("one.txt"), "hello").unwrap();
@@ -260,7 +260,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn trailing_dot_folders_are_walked_themselves() {
-        let plain = std::env::temp_dir().join(format!("filecraft-walk-dots-{}", std::process::id()));
+        let plain = std::env::temp_dir().join(format!("findcraft-walk-dots-{}", std::process::id()));
         let root = crate::util::fs_path(&plain.to_string_lossy());
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("sub.")).unwrap();
@@ -289,7 +289,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn reparse_folders_are_counted() {
-        let root = std::env::temp_dir().join(format!("filecraft-walk-junction-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("findcraft-walk-junction-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("real")).unwrap();
         std::fs::write(root.join("real").join("file.txt"), "").unwrap();
@@ -339,7 +339,7 @@ mod tests {
     /// entries; it now stops at the last valid id and the walk fails.
     #[test]
     fn ids_never_wrap_to_the_root() {
-        let dir = std::env::temp_dir().join(format!("filecraft-walk-ids-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-walk-ids-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for i in 0..5 {
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn invalid_unicode_names_are_counted_and_not_entered() {
         use std::os::windows::ffi::OsStringExt;
-        let dir = std::env::temp_dir().join(format!("filecraft-walk-lossy-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-walk-lossy-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let bad = dir.join(std::ffi::OsString::from_wide(&[0x61, 0xD800]));
         std::fs::create_dir_all(&bad).unwrap();
@@ -405,7 +405,7 @@ mod tests {
     #[test]
     fn unreadable_folders_are_counted() {
         let skipped = AtomicUsize::new(0);
-        let missing = std::env::temp_dir().join(format!("filecraft-walk-missing-{}", std::process::id()));
+        let missing = std::env::temp_dir().join(format!("findcraft-walk-missing-{}", std::process::id()));
         assert!(read_alone(&missing, &skipped, &AtomicBool::new(false)).is_empty());
         assert_eq!(skipped.load(Ordering::Relaxed), 1);
     }
@@ -414,7 +414,7 @@ mod tests {
     /// listing part-way instead of after the whole folder.
     #[test]
     fn big_folders_are_streamed_and_cancellable() {
-        let dir = std::env::temp_dir().join(format!("filecraft-walk-big-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("findcraft-walk-big-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         for i in 0..3 * BATCH + 1 {
@@ -438,18 +438,18 @@ mod bench {
     use crate::search::{Query, SearchOptions, Sort, search};
     use std::sync::Arc;
 
-    /// `FILECRAFT_BENCH_ROOT=D:\ cargo test --release bench_real_drive -- --ignored --nocapture`
+    /// `FINDCRAFT_BENCH_ROOT=D:\ cargo test --release bench_real_drive -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn bench_real_drive() {
-        let root = std::env::var("FILECRAFT_BENCH_ROOT").unwrap_or_else(|_| r"D:\".into());
+        let root = std::env::var("FINDCRAFT_BENCH_ROOT").unwrap_or_else(|_| r"D:\".into());
         let letter = root.chars().next().unwrap().to_ascii_uppercase();
         let t = Instant::now();
         let v = walk_volume(letter, Path::new(&root), &AtomicUsize::new(0), &AtomicUsize::new(0), &AtomicUsize::new(0), &AtomicBool::new(false))
             .unwrap();
         eprintln!("walk: {} entries in {:.2?} (build incl. sorting {:.2?})", v.len(), t.elapsed(), v.build_time);
 
-        let path = std::env::temp_dir().join("filecraft-bench.idx");
+        let path = std::env::temp_dir().join("findcraft-bench.idx");
         let t = Instant::now();
         v.save(&path).unwrap();
         let size = std::fs::metadata(&path).unwrap().len();
