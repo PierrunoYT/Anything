@@ -1,4 +1,17 @@
 <p align="center"><img src="assets/logos/logo.png" alt="FindCraft logo: an orange folder with a magnifying glass" width="160"></p>
+<p align="center">
+  <a href="https://github.com/PierrunoYT/FindCraft/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/PierrunoYT/FindCraft/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
+  <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-0078D4" alt="Platforms: Windows | macOS | Linux">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4c1" alt="License: GPL-3.0"></a>
+</p>
+
+<p align="center">
+  <a href="#build-and-run">Get started</a> ·
+  <a href="#features">Features</a> ·
+  <a href="docs/user-guide.md">User guide</a> ·
+  <a href="#development">Development</a>
+</p>
+
 
 <h1 align="center">FindCraft</h1>
 

@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows
   every fixed drive.
 - App icon (an orange folder with a magnifying glass), embedded in the exe and shown in the window and taskbar.
 - Hero screenshot in `docs/media/`.
+- README: CI, platforms and license badges and a row of quick links under the tagline.
 - NTFS master file table indexing, with a parallel folder scan as the fallback. **⚡ Fast NTFS
   indexing** starts a small elevated helper (one UAC prompt) that reads the master file tables for
   the window, which keeps running without administrator rights (FC-18).
