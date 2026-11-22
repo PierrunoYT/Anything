@@ -113,6 +113,9 @@ All notable changes to this project are documented here. The format follows
 - Pressing Enter on a focused button in Settings or Help (such as "Delete cached indexes") opened
   the selected search result instead, and the arrows and other result shortcuts moved or acted on
   the results behind the dialog. Result shortcuts now wait until Settings and Help are closed.
+- The folder scan now counts every folder it lists but does not enter. On Linux and macOS, `/proc`,
+  `/sys`, `/dev`, `/run`, `/System/Volumes` and symbolic links to folders were left out of the
+  count, so the status bar presented the index as complete.
 - Fast NTFS indexing no longer gives a file the name or size of a deleted one: a leftover extension
   record of a deleted file was merged into whatever file reused its base record. Extension records
   now count only when their base reference's sequence number matches.

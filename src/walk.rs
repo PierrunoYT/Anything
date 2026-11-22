@@ -35,7 +35,7 @@ struct Shared<'a> {
     /// Folders found but not finished, wherever they wait.
     pending: AtomicUsize,
     skipped: &'a AtomicUsize,
-    /// Folders listed but not walked because they are reparse points.
+    /// Folders listed but not walked: reparse points, symbolic links and [`PSEUDO_FOLDERS`].
     not_followed: &'a AtomicUsize,
     cancel: &'a AtomicBool,
 }
@@ -52,8 +52,8 @@ struct Raw {
 /// Indexes everything under `root` (normally `X:\`). Ids are handed out by an atomic counter so
 /// workers can enqueue subdirectories with their final id while a single collector fills the table.
 /// Folders and entries that cannot be read are left out and counted in `skipped`; folders that are
-/// reparse points (junctions, symbolic links, mount points) are listed but not walked, and counted
-/// in `not_followed`.
+/// reparse points (junctions, symbolic links, mount points), symbolic links to folders and
+/// [`PSEUDO_FOLDERS`] are listed but not walked, and counted in `not_followed`.
 pub fn walk_volume(
     letter: char,
     root: &Path,
@@ -174,7 +174,9 @@ fn read_one_dir(
         }
         let path = entry.path();
         let pseudo = PSEUDO_FOLDERS.iter().any(|p| path == Path::new(p));
-        if !lossy && !pseudo && attrs & ATTR_DIRECTORY != 0 && attrs & ATTR_REPARSE_POINT == 0 {
+        let is_dir = attrs & ATTR_DIRECTORY != 0;
+        let reparse = attrs & ATTR_REPARSE_POINT != 0;
+        if !lossy && !pseudo && is_dir && !reparse {
             shared.pending.fetch_add(1, Ordering::AcqRel);
             let job = (path, idx);
             if work_tx.len() < SHARED_QUEUE_LIMIT {
@@ -182,7 +184,8 @@ fn read_one_dir(
             } else {
                 local.push(job);
             }
-        } else if attrs & ATTR_DIRECTORY != 0 && attrs & ATTR_REPARSE_POINT != 0 {
+        } else if (is_dir && (pseudo || reparse)) || links_to_folder(&meta, &path) {
+            // Listed but not entered (a folder with a lossy name is counted as skipped instead).
             shared.not_followed.fetch_add(1, Ordering::Relaxed);
         }
         batch.push(Raw { idx, parent: dir_id, name, attrs, size, mtime });
@@ -229,6 +232,18 @@ fn attributes(meta: &std::fs::Metadata) -> (u32, u64, i64) {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |d| (d.as_nanos() / 100) as i64 + 116_444_736_000_000_000);
     (attrs, if meta.is_dir() { 0 } else { meta.len() }, mtime)
+}
+
+/// Whether an entry is a symbolic link to a folder outside Windows, where its own metadata (not
+/// followed) does not say so. On Windows such a link is a folder reparse point.
+#[cfg(not(windows))]
+fn links_to_folder(meta: &std::fs::Metadata, path: &Path) -> bool {
+    meta.file_type().is_symlink() && std::fs::metadata(path).is_ok_and(|m| m.is_dir())
+}
+
+#[cfg(windows)]
+fn links_to_folder(_: &std::fs::Metadata, _: &Path) -> bool {
+    false
 }
 
 #[cfg(test)]
@@ -309,6 +324,26 @@ mod tests {
         let mut paths: Vec<String> = v.by_name.iter().map(|&i| v.full_path(i)).collect();
         paths.sort();
         assert_eq!(paths, [r"T:\link", r"T:\real", r"T:\real\file.txt"]);
+        assert_eq!(not_followed.load(Ordering::Relaxed), 1);
+        assert_eq!(skipped.load(Ordering::Relaxed), 0);
+    }
+
+    /// A symbolic link to a folder is listed but not entered, and counted like a junction on
+    /// Windows. It used to be left out of the count, so the index looked complete.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_folders_are_counted() {
+        let root = std::env::temp_dir().join(format!("findcraft-walk-symlink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("real")).unwrap();
+        std::fs::write(root.join("real").join("file.txt"), "").unwrap();
+        std::os::unix::fs::symlink(root.join("real"), root.join("link")).unwrap();
+
+        let (skipped, not_followed) = (AtomicUsize::new(0), AtomicUsize::new(0));
+        let v = walk_volume('T', &root, &AtomicUsize::new(0), &skipped, &not_followed, &AtomicBool::new(false)).unwrap();
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(v.len(), 3);
         assert_eq!(not_followed.load(Ordering::Relaxed), 1);
         assert_eq!(skipped.load(Ordering::Relaxed), 0);
     }
