@@ -95,6 +95,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Choosing Save or Don't save when asked about unsaved changes after clicking another result could
+  select a different file, if the index had updated while the question was open. The file clicked
+  is now found again in the latest results, and nothing is selected if it is gone.
 - Pressing F2 (or View > Preview pane) while editing a file in the preview pane hid the pane, and
   Save and Discard with it. The pane now stays while an edit is open.
 - Closing FindCraft while its window was hidden in the notification area and an inline edit had

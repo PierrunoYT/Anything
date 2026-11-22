@@ -33,7 +33,8 @@ const SEARCH_BOX_ID: &str = "search_box";
 const PREVIEW_TEXT_ID: &str = "preview_text";
 
 enum Pending {
-    Select(usize),
+    /// The item to select, by lower-case name and full path: rows move when the index updates.
+    Select { lower_name: String, path: String },
     Close,
 }
 
@@ -182,6 +183,8 @@ pub struct FindCraftApp {
     /// The user's own options while the default ones of a query from the bar stand in for them.
     options_before_bar: Option<SearchOptions>,
     sort: Sort,
+    /// The order `hits` are in, which `sort` gets ahead of while a search runs.
+    shown_sort: Sort,
     needs_search: bool,
     latest_generation: u64,
     searching: bool,
@@ -302,6 +305,7 @@ impl FindCraftApp {
             options,
             options_before_bar: None,
             sort,
+            shown_sort: sort,
             needs_search: true,
             latest_generation: 0,
             searching: false,
@@ -563,6 +567,7 @@ impl FindCraftApp {
             self.search_time = res.elapsed;
             self.hits = res.hits;
             self.shown = res.index;
+            self.shown_sort = res.sort;
             self.restore_selection(res.sort);
         }
 
@@ -621,7 +626,9 @@ impl FindCraftApp {
             return;
         }
         if !same && self.preview.as_ref().is_some_and(|p| p.dirty) {
-            self.pending = Some(Pending::Select(row));
+            let v = self.shown.volume(self.hits[row].vol);
+            let idx = self.hits[row].idx;
+            self.pending = Some(Pending::Select { lower_name: v.lower_name(idx).to_string(), path: v.full_path(idx) });
             return;
         }
         self.select(row);
@@ -635,6 +642,13 @@ impl FindCraftApp {
         self.selected_path = Some((v.lower_name(hit.idx).to_string(), v.full_path(hit.idx)));
         self.scroll_to_selected = true;
         self.load_preview();
+    }
+
+    /// Selects the item a pending selection named, wherever the latest results put it.
+    fn select_pending(&mut self, lower_name: &str, path: &str) {
+        if let Some(row) = find_row(&self.shown, &self.hits, self.shown_sort, lower_name, path) {
+            self.select(row);
+        }
     }
 
     fn load_preview(&mut self) {
@@ -889,11 +903,9 @@ impl FindCraftApp {
                 match then {
                     // Typed while saving: ask again rather than drop those edits.
                     Some(next) if dirty => self.pending = Some(next),
-                    Some(Pending::Select(row)) => {
+                    Some(Pending::Select { lower_name, path }) => {
                         self.preview = None;
-                        if row < self.hits.len() {
-                            self.select(row);
-                        }
+                        self.select_pending(&lower_name, &path);
                     }
                     Some(Pending::Close) => self.close_window(ctx),
                     None => {}
@@ -1504,11 +1516,9 @@ impl FindCraftApp {
             }
         }
         match pending {
-            Some(Pending::Select(row)) => {
+            Some(Pending::Select { lower_name, path }) => {
                 self.preview = None;
-                if row < self.hits.len() {
-                    self.select(row);
-                }
+                self.select_pending(&lower_name, &path);
             }
             Some(Pending::Close) if closing => self.close_window(ctx),
             _ => {}
