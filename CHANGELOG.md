@@ -131,6 +131,10 @@ All notable changes to this project are documented here. The format follows
 - Fast NTFS indexing no longer loses records that lie in a sparse run of the master file table:
   they were read as zeros, so those files and everything under them silently went missing. Such
   a table now fails the read, and the folder scan indexes the drive instead.
+- On Linux and macOS the Date Modified column showed UTC times and `dm:today`, `dm:yesterday` and
+  `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
+  the system time zone (`TZ` or `/etc/localtime`), and each date starts at its own local midnight,
+  also across a daylight-saving change, as on Windows.
 - Icons in the results, preview pane, sort arrows and status bar (🗀 🗋 ⚡ ⏶ ✔ …) rendered as empty
   boxes: egui 0.37 only bundles its emoji fonts with the `monochrome_emoji_fonts` feature, which is
   now enabled. The few characters no bundled font has (`●`, `→`, `↑`, `↓`) are replaced.

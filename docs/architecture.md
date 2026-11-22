@@ -94,6 +94,9 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   (its `Data` volume is firmlinked to `/Users`, `/Applications` and so on, so walking it would
   index every user file twice) and `/dev`. `actions` uses `/usr/bin/open` (and `open -R` to reveal),
   and the cache is under `~/Library/Caches/FindCraft`. `windows-sys` is a Windows-only dependency.
+- **Local time** — on Windows `util` converts with the system time zone API; on Linux and macOS
+  with the C library (`localtime_r`, `mktime` through `libc`, a dependency outside Windows only),
+  so the Date Modified column and `dm:` dates follow `TZ` or `/etc/localtime`.
 - **Indexer** (`indexer.rs`) — one thread per drive: load the cache and publish it, then rebuild
   if the cache is missing or too old (MFT for NTFS drives when the helper runs or the window
   itself is elevated, else walk, with walk as the fallback when the MFT read fails or panics),

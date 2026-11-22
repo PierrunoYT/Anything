@@ -976,6 +976,7 @@ dependencies = [
  "egui_extras",
  "globset",
  "image",
+ "libc",
  "memchr",
  "raw-window-handle",
  "regex",

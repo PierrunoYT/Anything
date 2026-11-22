@@ -46,6 +46,10 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 
+# Local time on Linux and macOS: the C library's time zone (`localtime_r`, `mktime`).
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2"
+
 [build-dependencies]
 winresource = "0.1"
 

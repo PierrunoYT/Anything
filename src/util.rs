@@ -53,9 +53,26 @@ pub fn local_offset() -> i64 {
     (((local.dwHighDateTime as i64) << 32) | local.dwLowDateTime as i64) - now
 }
 
+/// Offset of local time from UTC, in ticks, at the current instant (so in the current
+/// daylight-saving state), as the C library's time zone (`TZ` or `/etc/localtime`) gives it.
 #[cfg(not(windows))]
 pub fn local_offset() -> i64 {
-    0
+    let now = (now_filetime() - UNIX_EPOCH_TICKS).div_euclid(TICKS_PER_SEC);
+    let t = now as libc::time_t;
+    // SAFETY: `tm` is a plain C struct; all-zero (including a null `tm_zone`) is a valid value.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    // SAFETY: `tzset` takes no arguments; `t` and `tm` are valid for reads and writes during the call.
+    let converted = unsafe {
+        tzset();
+        !libc::localtime_r(&t, &mut tm).is_null()
+    };
+    if converted { tm.tm_gmtoff as i64 * TICKS_PER_SEC } else { 0 }
+}
+
+#[cfg(not(windows))]
+unsafe extern "C" {
+    /// POSIX: reads `TZ` into the C library's zone state. `localtime_r` need not do it itself.
+    fn tzset();
 }
 
 /// FILETIME of local midnight at the start of today.
@@ -67,7 +84,7 @@ pub fn local_midnight_today() -> i64 {
 
 /// FILETIME of local midnight for a calendar date, using the UTC offset in effect on that date
 /// rather than today's, so a date on the other side of a daylight-saving change is not an hour
-/// off. Falls back to today's offset if Windows cannot convert the date.
+/// off. Falls back to today's offset if the system cannot convert the date.
 #[cfg(windows)]
 pub fn local_midnight(year: i64, month: u32, day: u32) -> i64 {
     use windows_sys::Win32::Foundation::SYSTEMTIME;
@@ -94,9 +111,30 @@ pub fn local_midnight(year: i64, month: u32, day: u32) -> i64 {
     UNIX_EPOCH_TICKS + days * TICKS_PER_DAY + secs * TICKS_PER_SEC + utc.wMilliseconds as i64 * 10_000
 }
 
+/// Same as the Windows version above, through the C library's `mktime`.
 #[cfg(not(windows))]
 pub fn local_midnight(year: i64, month: u32, day: u32) -> i64 {
-    UNIX_EPOCH_TICKS + days_from_civil(year, month, day) * TICKS_PER_DAY
+    let fallback = || UNIX_EPOCH_TICKS + days_from_civil(year, month, day) * TICKS_PER_DAY - local_offset();
+    let (Ok(year), Ok(month), Ok(day)) = (libc::c_int::try_from(year - 1900), libc::c_int::try_from(month), libc::c_int::try_from(day))
+    else {
+        return fallback();
+    };
+    // SAFETY: `tm` is a plain C struct; all-zero (including a null `tm_zone`) is a valid value.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    tm.tm_year = year;
+    tm.tm_mon = month - 1;
+    tm.tm_mday = day;
+    // Let `mktime` find whether daylight-saving time is in effect at that midnight. A midnight
+    // skipped by a clock change is moved forward to the first local time that exists.
+    tm.tm_isdst = -1;
+    // SAFETY: `tm` is a valid, writable struct; `mktime` reads the time zone itself.
+    let secs = unsafe { libc::mktime(&mut tm) };
+    // -1 is the error value; as a result it would be 23:59:59 on 1969-12-31 UTC, never a midnight
+    // in a real time zone.
+    if secs == -1 {
+        return fallback();
+    }
+    UNIX_EPOCH_TICKS + secs as i64 * TICKS_PER_SEC
 }
 
 /// Parses `YYYY-MM-DD` (or `YYYY/MM/DD`).
@@ -296,6 +334,22 @@ mod tests {
             assert!(ok, "{y}-{m}-{d}");
             let got = (local.wYear as i64, local.wMonth as u32, local.wDay as u32, local.wHour, local.wMinute, local.wSecond);
             assert_eq!(got, (y, m, d, 0, 0, 0), "{y}-{m}-{d}");
+        }
+    }
+
+    /// Outside Windows, local midnight was UTC midnight and the local offset was 0, so dates and
+    /// times were off by the UTC offset. Midnight must read back as 00:00 local time on that date.
+    #[cfg(not(windows))]
+    #[test]
+    fn local_midnight_is_local_on_unix() {
+        for (y, m, d) in [(2026, 1, 15), (2026, 7, 15), (2025, 12, 31), (2025, 6, 30)] {
+            let t = ((local_midnight(y, m, d) - UNIX_EPOCH_TICKS) / TICKS_PER_SEC) as libc::time_t;
+            // SAFETY: `tm` is a plain C struct; all-zero (including a null `tm_zone`) is valid.
+            let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+            // SAFETY: `t` and `tm` are valid for reads and writes during the call.
+            assert!(!unsafe { libc::localtime_r(&t, &mut tm) }.is_null(), "{y}-{m}-{d}");
+            let got = (i64::from(tm.tm_year) + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+            assert_eq!(got, (y, m as i32, d as i32, 0, 0, 0), "{y}-{m}-{d}");
         }
     }
 
