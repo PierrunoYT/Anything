@@ -6,7 +6,7 @@
 //! is also why the state lives behind a mutex and the bar has a searcher of its own.
 
 use crate::actions;
-use crate::hotkey::{self, BarSignals};
+use crate::hotkey::{self, BarRequest, BarSignals};
 use crate::index::{ATTR_HIDDEN, ATTR_SYSTEM, Index, VolumeIndex};
 use crate::search::{Hit, SearchOptions, Searcher, Sort};
 use crate::util::{group_digits, win32_alias};
@@ -420,15 +420,14 @@ impl QuickBar {
         resp.clicked()
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui) {
-        let ctx = ui.ctx().clone();
-        // Alt+F4 and the like: eframe leaves closing a secondary window to the viewport's owner.
-        let close_requested = ctx.input(|i| i.viewport().close_requested());
-        let request = self.signals.take();
-        if close_requested {
+    /// Closes and opens the bar as asked since the last frame: by the window itself
+    /// (`close_requested`) and by the hotkey (`request`).
+    fn follow(&mut self, close_requested: bool, request: BarRequest) {
+        if close_requested && !request.open {
             self.close();
-        } else if request.close {
-            // The hotkey has already marked the bar closed, and may have reopened it since.
+        } else if close_requested || request.close {
+            // The hotkey has already marked the bar closed, and may have reopened it since. If it
+            // has, the bar stays marked open, so that the next press closes it again.
             self.hide();
         }
         if request.open {
@@ -441,6 +440,13 @@ impl QuickBar {
             self.take_foreground = true;
             self.was_focused = false;
         }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        // Alt+F4 and the like: eframe leaves closing a secondary window to the viewport's owner.
+        let close_requested = ctx.input(|i| i.viewport().close_requested());
+        self.follow(close_requested, self.signals.take());
         if self.take_foreground {
             if hotkey::focus_bar() {
                 self.take_foreground = false;
@@ -704,5 +710,24 @@ mod tests {
         let mut bar = bar_showing_rows();
         bar.run(copy, &ctx);
         assert!(!bar.is_open, "the bar should act on rows that match the query");
+    }
+
+    /// Alt+F4 in the frame the hotkey reopens the bar: the bar ends up open, so the next press
+    /// has to close it rather than "open" it again.
+    #[test]
+    fn a_close_request_gives_way_to_a_reopen() {
+        let mut bar = bar_showing_rows();
+        bar.is_open = false;
+        assert!(bar.signals.toggle());
+        bar.follow(true, bar.signals.take());
+        assert!(bar.is_open);
+        assert!(!bar.signals.toggle(), "the next press should close the bar");
+
+        let mut bar = bar_showing_rows();
+        assert!(bar.signals.toggle());
+        bar.follow(false, bar.signals.take());
+        bar.follow(true, bar.signals.take());
+        assert!(!bar.is_open);
+        assert!(bar.signals.toggle(), "the next press should open the closed bar");
     }
 }
