@@ -987,7 +987,8 @@ impl FindCraftApp {
         if f1 {
             self.show_help = !self.show_help;
         }
-        if f2 {
+        // Hiding the pane mid-edit would take Save and Discard away with it.
+        if f2 && !self.preview.as_ref().is_some_and(|p| p.editing) {
             self.show_preview = !self.show_preview;
             self.load_preview();
         }
@@ -1069,7 +1070,9 @@ impl FindCraftApp {
                 }
             });
             ui.menu_button("View", |ui| {
-                if ui.add(egui::Button::selectable(self.show_preview, "Preview pane").shortcut_text("F2")).clicked() {
+                let editing = self.preview.as_ref().is_some_and(|p| p.editing);
+                let item = egui::Button::selectable(self.show_preview, "Preview pane").shortcut_text("F2");
+                if ui.add_enabled(!editing, item).clicked() {
                     self.show_preview = !self.show_preview;
                     self.load_preview();
                     ui.close();

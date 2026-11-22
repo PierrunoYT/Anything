@@ -95,6 +95,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Pressing F2 (or View > Preview pane) while editing a file in the preview pane hid the pane, and
+  Save and Discard with it. The pane now stays while an edit is open.
 - Closing FindCraft while its window was hidden in the notification area and an inline edit had
   unsaved changes left it running with no way to answer: the question about the changes waited for
   a window that stayed hidden. The window now comes back to ask.

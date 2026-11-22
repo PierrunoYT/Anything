@@ -185,7 +185,7 @@ Right-click a result, use the preview pane buttons, or the keyboard:
 | `Ctrl+F` / `Esc` | Focus the search box / clear it |
 | `Tab` | From the search box: move to the results. From the results: back to the search box, with the query selected |
 | `F1` | Search syntax and shortcuts |
-| `F2` | Toggle the preview pane |
+| `F2` | Toggle the preview pane (not while editing in it) |
 | `F5` | Re-index all drives |
 
 The selection keys, the `Enter` keys, `F4`, `Ctrl+E`, `Ctrl+Shift+C` and `Esc` act on the results
