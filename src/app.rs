@@ -532,7 +532,7 @@ impl FindCraftApp {
 
     /// Tells the bar about a new snapshot of the index.
     fn publish_index(&self) {
-        self.quick_bar.lock().unwrap().set_index(self.index.clone());
+        self.quick_bar.lock().unwrap_or_else(|e| e.into_inner()).set_index(self.index.clone());
     }
 
     fn set_status(&mut self, msg: impl Into<String>) {

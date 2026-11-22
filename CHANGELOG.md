@@ -146,6 +146,9 @@ All notable changes to this project are documented here. The format follows
   `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
   the system time zone (`TZ` or `/etc/localtime`), and each date starts at its own local midnight,
   also across a daylight-saving change, as on Windows.
+- A lock poisoned by an earlier panic no longer brings down the quick search bar or the hotkey
+  thread. Taking the bar's state or the next hotkey panicked again, and in the hotkey window's
+  procedure that panic crossed into Windows and aborted FindCraft. The lock is now taken anyway.
 - Clicking a quick search result in the same frame as typing no longer opens a result of the
   previous query. Clicks now wait for the search of what was typed, as `Enter` already did.
 - Icons in the results, preview pane, sort arrows and status bar (🗀 🗋 ⚡ ⏶ ✔ …) rendered as empty

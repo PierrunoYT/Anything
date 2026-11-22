@@ -499,7 +499,7 @@ mod platform {
                 DestroyWindow(hwnd);
             },
             WM_SET_HOTKEY => with_state(|state| {
-                let next = state.next_hotkey.lock().unwrap().take();
+                let next = state.next_hotkey.lock().unwrap_or_else(|e| e.into_inner()).take();
                 if let Some(hotkey) = next {
                     state.register(hwnd, hotkey);
                 }
@@ -633,7 +633,7 @@ mod platform {
 
         /// Replaces the hotkey. The outcome arrives as `Event::HotkeyRegistered`.
         pub fn set_hotkey(&self, hotkey: Hotkey) {
-            *self.next_hotkey.lock().unwrap() = Some(hotkey);
+            *self.next_hotkey.lock().unwrap_or_else(|e| e.into_inner()) = Some(hotkey);
             // SAFETY: posting to a window that no longer exists fails harmlessly.
             unsafe {
                 PostMessageW(self.hwnd as HWND, WM_SET_HOTKEY, 0, 0);

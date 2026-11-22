@@ -547,7 +547,7 @@ pub fn register(ctx: &egui::Context, bar: &Arc<Mutex<QuickBar>>) {
         .with_visible(false);
     let bar = Arc::clone(bar);
     ctx.show_viewport_deferred(viewport_id(), builder, move |ui, _class| {
-        bar.lock().unwrap().ui(ui);
+        bar.lock().unwrap_or_else(|e| e.into_inner()).ui(ui);
     });
 }
 
