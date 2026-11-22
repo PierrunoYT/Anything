@@ -52,7 +52,8 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   - more than 64 Mi records, or record state (about 56 bytes per record) that cannot be allocated;
   - a data run that is empty, has a negative or overflowing LCN, or ends past the volume, or a
     sparse run longer than the volume;
-  - runs that hold fewer records than `MftValidDataLength` implies;
+  - runs that hold fewer records than `MftValidDataLength` implies, or a sparse run among those
+    records (they would read as zeros and vanish with everything under them);
   - a root record (5) that was not read as a folder in use (for example a torn read of the live
     volume), since nothing would be reachable and the index would look empty but complete.
 

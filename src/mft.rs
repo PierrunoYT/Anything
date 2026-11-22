@@ -184,11 +184,9 @@ fn read_records(
             }
             let want = (run_bytes - done).min((READ_CHUNK - filled) as u64).min(left) as usize;
             let chunk = &mut buf[filled..filled + want];
-            match lcn {
-                Some(lcn) => read(lcn * cluster + done, chunk)?,
-                // Sparse run: no records stored.
-                None => chunk.fill(0),
-            }
+            // `runs_cover_records` rejected sparse runs among the records.
+            let Some(lcn) = lcn else { anyhow::bail!("sparse $MFT run among the records") };
+            read(lcn * cluster + done, chunk)?;
             filled += want;
             done += want as u64;
             let whole = filled - filled % record_size;
@@ -599,14 +597,24 @@ fn decode_runs(attr: &[u8], total_clusters: u64) -> Option<Runs> {
     (!runs.is_empty()).then_some(runs)
 }
 
-/// Whether `runs` (in clusters of `cluster` bytes) hold at least `record_count` records. When
+/// Whether `runs` (in clusters of `cluster` bytes) store at least `record_count` records. When
 /// $MFT is fragmented enough, record 0 holds only the first part of its run list and the rest
 /// lives in extension records, so the runs found there can cover less than the whole table.
+/// A sparse run among the records stores none of them: they would read as zeros and vanish.
 fn runs_cover_records(runs: &[(Option<u64>, u64)], cluster: u64, record_size: u64, record_count: u64) -> bool {
-    let bytes = runs
-        .iter()
-        .try_fold(0u64, |acc, &(_, clusters)| acc.checked_add(clusters.checked_mul(cluster)?));
-    bytes.is_some_and(|b| b / record_size >= record_count)
+    let Some(needed) = record_count.checked_mul(record_size) else { return false };
+    let mut bytes = 0u64;
+    for &(lcn, clusters) in runs {
+        if bytes >= needed {
+            break;
+        }
+        if lcn.is_none() {
+            return false;
+        }
+        let Some(b) = clusters.checked_mul(cluster).and_then(|b| bytes.checked_add(b)) else { return false };
+        bytes = b;
+    }
+    bytes >= needed
 }
 
 /// Keeps records reachable from the root through valid parents and turns them into an index.
@@ -812,9 +820,13 @@ mod tests {
     #[test]
     fn partial_mft_run_lists_are_rejected() {
         // 0x20 clusters of 4 KiB hold 128 records of 1 KiB.
-        let runs = [(Some(0x1000), 0x10), (None, 0x10)];
+        let runs = [(Some(0x1000), 0x10), (Some(0x2000), 0x10)];
         assert!(runs_cover_records(&runs, 4096, 1024, 128));
         assert!(!runs_cover_records(&runs, 4096, 1024, 129));
+        // A sparse run stores no records: those in it used to read as zeros and vanish.
+        assert!(!runs_cover_records(&[(Some(0x1000), 0x10), (None, 0x10)], 4096, 1024, 128));
+        // Past the records, a sparse run is harmless.
+        assert!(runs_cover_records(&[(Some(0x1000), 0x10), (None, 0x10)], 4096, 1024, 64));
         assert!(!runs_cover_records(&[(Some(1), u64::MAX)], 4096, 1024, 1));
 
         // An attribute that starts past VCN 0 is an extension piece, not the start of the list.
