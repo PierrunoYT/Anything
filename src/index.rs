@@ -606,22 +606,40 @@ pub fn data_dir() -> PathBuf {
 /// by unelevated code of the same user, which could otherwise aim an elevated instance's cache
 /// writes, staging cleanup and backups at a protected folder (FC-18).
 pub fn ensure_own_dir(dir: &Path) -> io::Result<()> {
-    fs::create_dir_all(dir)?;
-    let base = data_dir();
-    let mut cur = Some(dir);
-    let mut first = true;
-    while let Some(d) = cur {
-        if !first && !d.starts_with(&base) {
-            break;
-        }
-        first = false;
-        if is_reparse_point(&fs::symlink_metadata(d)?) {
+    ensure_own_dir_in(dir, &data_dir())
+}
+
+/// [`ensure_own_dir`] with the data folder `base`. The folders are checked from the outermost
+/// down, and each missing one is created only once its parent passed, so nothing is ever created
+/// through a link (creating `dir` first made its missing folders inside the link's target).
+fn ensure_own_dir_in(dir: &Path, base: &Path) -> io::Result<()> {
+    let chain: Vec<&Path> = std::iter::once(dir).chain(dir.ancestors().skip(1).take_while(|d| d.starts_with(base))).collect();
+    // The folders above the checked ones (such as `%LOCALAPPDATA%`) are not FindCraft's.
+    if let Some(above) = chain.last().and_then(|d| d.parent()) {
+        fs::create_dir_all(above)?;
+    }
+    for d in chain.into_iter().rev() {
+        let meta = match fs::symlink_metadata(d) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                if let Err(e) = fs::create_dir(d)
+                    && e.kind() != io::ErrorKind::AlreadyExists
+                {
+                    return Err(e);
+                }
+                // Checked again: something else may have created it first.
+                fs::symlink_metadata(d)?
+            }
+            meta => meta?,
+        };
+        if is_reparse_point(&meta) {
             return Err(io::Error::other(format!(
                 "{} is a link or junction; FindCraft does not write through it",
                 d.display()
             )));
         }
-        cur = d.parent();
+        if !meta.is_dir() {
+            return Err(io::Error::other(format!("{} is not a folder", d.display())));
+        }
     }
     Ok(())
 }
@@ -1201,6 +1219,35 @@ pub mod tests {
         assert!(err.to_string().contains("link or junction"), "{err}");
         assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
         fs::remove_dir(&link).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// With the data folder itself a junction, its missing `index` subfolder was created inside
+    /// the junction's target before the junction was found and the save refused.
+    #[cfg(windows)]
+    #[test]
+    fn missing_folders_are_not_created_through_a_junction() {
+        let dir = cache_dir("junction-base");
+        let target = dir.join("target");
+        fs::create_dir_all(&target).unwrap();
+        let base = dir.join("FindCraft");
+        junction(&base, &target);
+
+        let err = ensure_own_dir_in(&base.join("index"), &base).unwrap_err();
+        assert!(err.to_string().contains("link or junction"), "{err}");
+        assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
+        fs::remove_dir(&base).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Missing folders of the chain are created, outermost first.
+    #[test]
+    fn missing_data_folders_are_created() {
+        let dir = cache_dir("data-folders");
+        let base = dir.join("FindCraft");
+        ensure_own_dir_in(&base.join("index"), &base).unwrap();
+        assert!(base.join("index").is_dir());
+        ensure_own_dir_in(&base.join("index"), &base).unwrap();
         fs::remove_dir_all(&dir).unwrap();
     }
 

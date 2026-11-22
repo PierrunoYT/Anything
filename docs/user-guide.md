@@ -168,7 +168,8 @@ first frame.
   asks again.
 - FindCraft refuses to save its cache or a backup copy when its data folder
   (`%LOCALAPPDATA%\FindCraft`, `index` or `backup`) is a junction or symbolic link, so those
-  writes cannot be redirected to another folder.
+  writes cannot be redirected to another folder; it does not create a missing folder through one
+  either.
 
 ## Actions
 
