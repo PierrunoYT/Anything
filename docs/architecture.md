@@ -216,6 +216,8 @@ meanwhile. Since the window's visibility lags behind these calls, the hotkey tog
 is meant to be open, kept in `BarSignals`, instead of reading it. `WM_CLOSE` to the hidden window
 comes from outside (`taskkill` sends it to every top-level window), so it means "exit" and goes
 through the usual unsaved-edits question; the app stops the thread with a private message instead.
+That message carries a random per-thread cookie in `wparam` and is ignored without it: the window
+class is fixed, so any program could find the window and post the message.
 
 Key presses are read before the text box takes the frame's typing but run after it (`read_keys`,
 then `run`), so a key pressed in the same frame as a character sees the new query. A click on a row

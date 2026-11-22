@@ -207,6 +207,7 @@ mod platform {
     use crossbeam_channel::{Receiver, Sender, unbounded};
     use eframe::egui;
     use std::cell::{Cell, RefCell};
+    use std::hash::{BuildHasher, RandomState};
     use std::io;
     use std::rc::Rc;
     use std::sync::{Arc, Mutex};
@@ -239,7 +240,8 @@ mod platform {
     /// As in `shellapi.h`; `windows-sys` has only its two parts.
     const NIN_KEYSELECT: u32 = NIN_SELECT | NINF_KEY;
     /// `Background::drop`'s request to end the thread. It is not WM_CLOSE, which anyone can send:
-    /// `taskkill` sends that to every top-level window, and it means "exit the program".
+    /// `taskkill` sends that to every top-level window, and it means "exit the program". The class
+    /// name is no secret either, so `wparam` has to carry the thread's random `shutdown_cookie`.
     const WM_SHUTDOWN: u32 = WM_APP + 4;
     /// How long dropping `Background` waits for the thread to remove the tray icon. The main thread
     /// handles no messages meanwhile, and a thread blocked on one of its windows would never finish.
@@ -259,6 +261,7 @@ mod platform {
         next_hotkey: Arc<Mutex<Option<Hotkey>>>,
         signals: Arc<BarSignals>,
         registered: Cell<bool>,
+        shutdown_cookie: usize,
     }
 
     thread_local! {
@@ -494,10 +497,14 @@ mod platform {
             // From outside, such as `taskkill`: exit properly, rather than losing this window and
             // leaving a process nobody can reach.
             WM_CLOSE => with_state(|state| state.send(Event::Quit)),
-            // SAFETY: `hwnd` is this thread's own window.
-            WM_SHUTDOWN => unsafe {
-                DestroyWindow(hwnd);
-            },
+            WM_SHUTDOWN => with_state(|state| {
+                if wparam == state.shutdown_cookie {
+                    // SAFETY: `hwnd` is this thread's own window.
+                    unsafe {
+                        DestroyWindow(hwnd);
+                    }
+                }
+            }),
             WM_SET_HOTKEY => with_state(|state| {
                 let next = state.next_hotkey.lock().unwrap_or_else(|e| e.into_inner()).take();
                 if let Some(hotkey) = next {
@@ -574,6 +581,8 @@ mod platform {
         /// may call, also with a window that no longer exists.
         hwnd: isize,
         next_hotkey: Arc<Mutex<Option<Hotkey>>>,
+        /// What `WM_SHUTDOWN` has to carry to be obeyed.
+        shutdown_cookie: usize,
         /// Disconnects if the thread ever ends without being asked to.
         pub events: Receiver<Event>,
         stopped: std::sync::mpsc::Receiver<()>,
@@ -584,6 +593,9 @@ mod platform {
             let (events_tx, events) = unbounded();
             let next_hotkey = Arc::new(Mutex::new(None));
             let next_hotkey_thread = Arc::clone(&next_hotkey);
+            // `RandomState` is keyed from the system's random generator, so hashing anything with
+            // it gives a number other processes cannot guess.
+            let shutdown_cookie = RandomState::new().hash_one(()) as usize;
             let (started_tx, started) = std::sync::mpsc::channel();
             let (stopped_tx, stopped) = std::sync::mpsc::channel();
             std::thread::Builder::new().name("hotkey and tray".into()).spawn(move || {
@@ -605,6 +617,7 @@ mod platform {
                     next_hotkey: next_hotkey_thread,
                     signals,
                     registered: Cell::new(false),
+                    shutdown_cookie,
                 };
                 state.register(hwnd, hotkey);
                 STATE.set(Some(Rc::new(state)));
@@ -628,7 +641,7 @@ mod platform {
                 wake.request_repaint();
             })?;
             let hwnd = started.recv().map_err(|_| io::Error::other("the hotkey thread stopped"))??;
-            Ok(Background { hwnd, next_hotkey, events, stopped })
+            Ok(Background { hwnd, next_hotkey, shutdown_cookie, events, stopped })
         }
 
         /// Replaces the hotkey. The outcome arrives as `Event::HotkeyRegistered`.
@@ -645,7 +658,7 @@ mod platform {
         fn drop(&mut self) {
             // SAFETY: posting to a window that no longer exists fails harmlessly.
             unsafe {
-                PostMessageW(self.hwnd as HWND, WM_SHUTDOWN, 0, 0);
+                PostMessageW(self.hwnd as HWND, WM_SHUTDOWN, self.shutdown_cookie, 0);
             }
             let _ = self.stopped.recv_timeout(SHUTDOWN_WAIT);
         }

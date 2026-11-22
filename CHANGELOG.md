@@ -455,6 +455,9 @@ All notable changes to this project are documented here. The format follows
   still created a missing `index` or `backup` folder inside the link's target before refusing
   the write. The data folders are now checked from the outermost down, and a missing one is only
   created once the folder above it passed, so nothing is created through a link.
+- Another program can no longer switch off the quick search hotkey and tray icon by posting one
+  message to FindCraft's hidden window, whose class name is fixed and easy to find. The private
+  stop message now has to carry a random value only FindCraft knows, and is ignored otherwise.
 - External editor launches no longer go through `cmd /C`, so shell syntax in a file name (such as
   `a&calc&.txt` or `%VAR%`) can no longer run commands. The editor is resolved on `PATH` and
   started directly; `.cmd` shims such as VS Code's `code` still work. Quoted editor paths with
