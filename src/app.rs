@@ -1730,24 +1730,27 @@ impl FindCraftApp {
                             ui.end_row();
                         }
                     });
-                    ui.add_space(10.0);
-                    ui.strong("Quick search bar");
-                    ui.label(format!("{} opens it from anywhere (File > Settings to change or turn off).", self.hotkey));
-                    let bar_keys: &[(&str, &str)] = &[
-                        ("Up / Down", "move the selection"),
-                        ("Enter", "open"),
-                        ("Ctrl+Enter", "show in folder"),
-                        ("Shift+Enter", "show all results in this window"),
-                        ("Ctrl+Shift+C", "copy full path"),
-                        ("Esc", "close the bar"),
-                    ];
-                    egui::Grid::new("bar-keys").striped(true).num_columns(2).show(ui, |ui| {
-                        for (k, d) in bar_keys {
-                            ui.monospace(*k);
-                            ui.label(*d);
-                            ui.end_row();
-                        }
-                    });
+                    // The hotkey and the bar exist on Windows only.
+                    if cfg!(windows) {
+                        ui.add_space(10.0);
+                        ui.strong("Quick search bar");
+                        ui.label(format!("{} opens it from anywhere (File > Settings to change or turn off).", self.hotkey));
+                        let bar_keys: &[(&str, &str)] = &[
+                            ("Up / Down", "move the selection"),
+                            ("Enter", "open"),
+                            ("Ctrl+Enter", "show in folder"),
+                            ("Shift+Enter", "show all results in this window"),
+                            ("Ctrl+Shift+C", "copy full path"),
+                            ("Esc", "close the bar"),
+                        ];
+                        egui::Grid::new("bar-keys").striped(true).num_columns(2).show(ui, |ui| {
+                            for (k, d) in bar_keys {
+                                ui.monospace(*k);
+                                ui.label(*d);
+                                ui.end_row();
+                            }
+                        });
+                    }
                 });
             });
         self.show_help = open;

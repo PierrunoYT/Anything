@@ -95,6 +95,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- On Linux and macOS, Help described a quick search hotkey and bar that only exist on Windows. That
+  section is now shown on Windows only.
 - Status-bar messages such as "Copied full path" stayed up until the next mouse move or key press
   instead of going away after six seconds. The window now wakes up to clear them.
 - Choosing Save or Don't save when asked about unsaved changes after clicking another result could
