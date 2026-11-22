@@ -238,6 +238,9 @@ pub struct FindCraftApp {
     editor_confirm: Option<EditorConfirm>,
     /// Failures of shell actions (open, show in folder, properties), which run on worker threads.
     shell_errors: (std::sync::mpsc::Sender<String>, std::sync::mpsc::Receiver<String>),
+    /// Elevated only: editor commands resolved on a worker thread, as `PATH` can name slow or dead
+    /// shares; each waits there for the confirmation.
+    editor_resolved: (std::sync::mpsc::Sender<EditorConfirm>, std::sync::mpsc::Receiver<EditorConfirm>),
     excluded: BTreeSet<char>,
     max_age_minutes: u64,
     show_settings: bool,
@@ -336,6 +339,7 @@ impl FindCraftApp {
             editor_confirmed: None,
             editor_confirm: None,
             shell_errors,
+            editor_resolved: std::sync::mpsc::channel(),
             excluded,
             max_age_minutes,
             show_settings: false,
@@ -689,20 +693,28 @@ impl FindCraftApp {
             RowAction::Reveal => shell_path.and_then(|p| self.shell_in_background(ctx, move || actions::reveal(&p))),
             RowAction::Properties => shell_path.and_then(|p| self.shell_in_background(ctx, move || actions::properties(&p))),
             RowAction::EditExternal => shell_path.and_then(|p| {
-                // Resolved once: the program confirmed is the program launched (FC-18).
-                let program = actions::editor_program(&self.editor);
-                // Elevated, the editor would run as administrator: confirm the command first. A
-                // command that now resolves to another program is asked about again.
-                let confirmed = self.editor_confirmed.as_ref().is_some_and(|(command, confirmed)| {
-                    *command == self.editor && program.as_ref().is_ok_and(|p| p == confirmed)
-                });
-                if self.indexer.elevated && !confirmed {
-                    let program = program.map_err(|e| e.to_string());
-                    self.editor_confirm = Some(EditorConfirm { command: self.editor.clone(), file: p, program });
-                    Ok(())
-                } else {
-                    actions::edit_with(&program?, &self.editor, &p)
+                let editor = self.editor.clone();
+                if !self.indexer.elevated {
+                    // Resolving looks through every PATH directory, which can hang on a dead
+                    // share, so it runs on the worker thread with the launch.
+                    return self.shell_in_background(ctx, move || {
+                        let program = actions::editor_program(&editor)?;
+                        actions::edit_with(&program, &editor, &p)
+                    });
                 }
+                // Elevated, the editor would run as administrator: confirm the command first, once
+                // it has resolved (FC-18). The program confirmed is the program launched.
+                let resolved = self.editor_resolved.0.clone();
+                let repaint = ctx.clone();
+                actions::in_background(
+                    move || {
+                        let program = actions::editor_program(&editor).map_err(|e| e.to_string());
+                        let _ = resolved.send(EditorConfirm { command: editor, file: p, program });
+                        repaint.request_repaint();
+                        Ok(())
+                    },
+                    |_| {},
+                )
             }),
             RowAction::CopyPath => {
                 ctx.copy_text(full.clone());
@@ -750,9 +762,23 @@ impl FindCraftApp {
         })
     }
 
-    fn poll_shell(&mut self) {
+    fn poll_shell(&mut self, ctx: &egui::Context) {
         while let Ok(e) = self.shell_errors.1.try_recv() {
             self.set_status(format!("Failed: {e}"));
+        }
+        while let Ok(confirm) = self.editor_resolved.1.try_recv() {
+            // A command that now resolves to another program is asked about again.
+            let confirmed = self.editor_confirmed.as_ref().is_some_and(|(command, confirmed)| {
+                *command == confirm.command && confirm.program.as_ref().is_ok_and(|p| p == confirmed)
+            });
+            match confirm {
+                EditorConfirm { command, file, program: Ok(program) } if confirmed => {
+                    if let Err(e) = self.shell_in_background(ctx, move || actions::edit_with(&program, &command, &file)) {
+                        self.set_status(format!("Failed: {e}"));
+                    }
+                }
+                confirm => self.editor_confirm = Some(confirm),
+            }
         }
     }
 
@@ -1517,9 +1543,8 @@ impl FindCraftApp {
         let Some(run) = choice else { return };
         let Some(EditorConfirm { command, file, program: Ok(program) }) = self.editor_confirm.take() else { return };
         if run {
-            let result = actions::edit_with(&program, &command, &file);
-            self.editor_confirmed = Some((command, program));
-            if let Err(e) = result {
+            self.editor_confirmed = Some((command.clone(), program.clone()));
+            if let Err(e) = self.shell_in_background(ctx, move || actions::edit_with(&program, &command, &file)) {
                 self.set_status(format!("Failed: {e}"));
             }
         }
@@ -1856,7 +1881,7 @@ impl eframe::App for FindCraftApp {
         self.poll();
         self.poll_save(ctx);
         self.poll_helper_start();
-        self.poll_shell();
+        self.poll_shell(ctx);
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {

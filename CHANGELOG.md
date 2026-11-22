@@ -95,6 +95,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Opening a file in the external editor (Ctrl+E) froze the window while the editor was looked up
+  on `PATH`, for as long as a slow or unreachable network folder there took to answer. The editor
+  is now looked up and started in the background, and a failure still shows in the status bar.
 - Pressing Enter on a focused button in Settings or Help (such as "Delete cached indexes") opened
   the selected search result instead, and the arrows and other result shortcuts moved or acted on
   the results behind the dialog. Result shortcuts now wait until Settings and Help are closed.
