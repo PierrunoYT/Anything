@@ -146,6 +146,8 @@ All notable changes to this project are documented here. The format follows
   `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
   the system time zone (`TZ` or `/etc/localtime`), and each date starts at its own local midnight,
   also across a daylight-saving change, as on Windows.
+- Clicking a quick search result in the same frame as typing no longer opens a result of the
+  previous query. Clicks now wait for the search of what was typed, as `Enter` already did.
 - Icons in the results, preview pane, sort arrows and status bar (🗀 🗋 ⚡ ⏶ ✔ …) rendered as empty
   boxes: egui 0.37 only bundles its emoji fonts with the `monochrome_emoji_fonts` feature, which is
   now enabled. The few characters no bundled font has (`●`, `→`, `↑`, `↓`) are replaced.

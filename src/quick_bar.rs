@@ -499,7 +499,8 @@ impl QuickBar {
         }
         if let Some(i) = clicked {
             self.selected = i;
-            self.activate(Activate::Open, &ctx);
+            // Through `run`, like Enter: text typed this frame makes the clicked row a stale one.
+            self.run(Command::Activate(Activate::Open), &ctx);
         }
 
         let wanted = height(self.rows.len(), self.has_footer());
