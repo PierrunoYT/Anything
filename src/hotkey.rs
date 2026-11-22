@@ -638,8 +638,10 @@ mod platform {
                         DispatchMessageW(&msg);
                     }
                 }
-                STATE.set(None);
+                // Before the state goes, which disconnects `events`: an app that sees that drops
+                // `Background`, which must then know that the window has gone.
                 let _ = stopped_tx.send(());
+                STATE.set(None);
                 wake.request_repaint();
             })?;
             let hwnd = started.recv().map_err(|_| io::Error::other("the hotkey thread stopped"))??;
@@ -658,6 +660,11 @@ mod platform {
 
     impl Drop for Background {
         fn drop(&mut self) {
+            // A thread that has ended has destroyed its window, and the handle may since have been
+            // given to another program's window: only a thread still running is asked to stop.
+            if self.stopped.try_recv() != Err(std::sync::mpsc::TryRecvError::Empty) {
+                return;
+            }
             // SAFETY: posting to a window that no longer exists fails harmlessly.
             unsafe {
                 PostMessageW(self.hwnd as HWND, WM_SHUTDOWN, self.shutdown_cookie, 0);
