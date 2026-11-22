@@ -85,6 +85,8 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   of a drive letter. It is always walked from `/`; `/proc`, `/sys`, `/dev` and `/run` are listed
   but not entered, and symbolic links are not followed (their metadata is not followed either).
   Like junctions on Windows, those folders and symbolic links to folders count as not followed.
+  A folder whose device and inode were already walked (a bind mount showing a folder inside
+  itself) is not entered again and counts as not followed too.
   `util::SEP` and `util::volume_name` give paths without a drive prefix, separated by `/`, and
   `valid_name` only rejects `/` and NUL, since `\` and `:` are valid in Linux names. The MFT
   reader, its helper and the hotkey module are built and tested everywhere but only run on Windows.

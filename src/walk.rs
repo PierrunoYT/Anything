@@ -35,9 +35,31 @@ struct Shared<'a> {
     /// Folders found but not finished, wherever they wait.
     pending: AtomicUsize,
     skipped: &'a AtomicUsize,
-    /// Folders listed but not walked: reparse points, symbolic links and [`PSEUDO_FOLDERS`].
+    /// Folders listed but not walked: reparse points, symbolic links, [`PSEUDO_FOLDERS`] and
+    /// folders already walked under another path.
     not_followed: &'a AtomicUsize,
     cancel: &'a AtomicBool,
+    /// `(device, inode)` of every folder walked. A bind mount can show a folder inside itself
+    /// (`mount --bind / /mnt/root`), which would be walked forever; Windows has no such loops,
+    /// since reparse points are never entered.
+    #[cfg(unix)]
+    visited: std::sync::Mutex<std::collections::HashSet<(u64, u64)>>,
+}
+
+impl Shared<'_> {
+    /// Whether the folder with this metadata (not followed) is walked for the first time; marks
+    /// it walked.
+    #[cfg(unix)]
+    fn first_visit(&self, meta: &std::fs::Metadata) -> bool {
+        use std::os::unix::fs::MetadataExt;
+        let mut visited = self.visited.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        visited.insert((meta.dev(), meta.ino()))
+    }
+
+    #[cfg(not(unix))]
+    fn first_visit(&self, _: &std::fs::Metadata) -> bool {
+        true
+    }
 }
 
 struct Raw {
@@ -72,7 +94,11 @@ pub fn walk_volume(
         skipped,
         not_followed,
         cancel,
+        #[cfg(unix)]
+        visited: Default::default(),
     };
+    #[cfg(unix)]
+    shared.first_visit(&std::fs::metadata(root)?);
     let (work_tx, work_rx) = unbounded::<(PathBuf, u32)>();
     let (out_tx, out_rx) = bounded::<Vec<Raw>>(QUEUED_BATCHES);
     work_tx.send((root.to_path_buf(), 0))?;
@@ -176,7 +202,7 @@ fn read_one_dir(
         let pseudo = PSEUDO_FOLDERS.iter().any(|p| path == Path::new(p));
         let is_dir = attrs & ATTR_DIRECTORY != 0;
         let reparse = attrs & ATTR_REPARSE_POINT != 0;
-        if !lossy && !pseudo && is_dir && !reparse {
+        if !lossy && !pseudo && is_dir && !reparse && shared.first_visit(&meta) {
             shared.pending.fetch_add(1, Ordering::AcqRel);
             let job = (path, idx);
             if work_tx.len() < SHARED_QUEUE_LIMIT {
@@ -184,7 +210,7 @@ fn read_one_dir(
             } else {
                 local.push(job);
             }
-        } else if (is_dir && (pseudo || reparse)) || links_to_folder(&meta, &path) {
+        } else if (is_dir && (!lossy || reparse)) || links_to_folder(&meta, &path) {
             // Listed but not entered (a folder with a lossy name is counted as skipped instead).
             shared.not_followed.fetch_add(1, Ordering::Relaxed);
         }
@@ -362,6 +388,8 @@ mod tests {
             skipped,
             not_followed: &AtomicUsize::new(0),
             cancel,
+            #[cfg(unix)]
+            visited: Default::default(),
         };
         let (work_tx, _work_rx) = unbounded();
         let (out_tx, out_rx) = unbounded();
@@ -422,6 +450,8 @@ mod tests {
             skipped: &skipped,
             not_followed: &not_followed,
             cancel: &AtomicBool::new(false),
+            #[cfg(unix)]
+            visited: Default::default(),
         };
         let (out_tx, out_rx) = unbounded();
         read_one_dir(&dir, 0, &shared, &mut Vec::new(), &tx, &out_tx);

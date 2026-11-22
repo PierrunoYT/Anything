@@ -11,7 +11,8 @@ FindCraft also runs on Linux (`./FindCraft`). There are no drive letters: the on
 file system root `/`, shown as `/` in the status bar and in Settings. It is always indexed with a
 folder scan, which also enters the file systems mounted below `/` but not `/proc`, `/sys`, `/dev`
 and `/run`; symbolic links are listed but not followed. The status bar's hover text counts those
-folders and folder links as not entered. Paths use `/` (`etc/host` is a path term),
+folders and folder links as not entered. A folder mounted a second time (a bind mount) is entered
+once. Paths use `/` (`etc/host` is a path term),
 and `\` and `:` are ordinary characters of names. The cache is kept in
 `$XDG_CACHE_HOME/findcraft/index`, by default `~/.cache/findcraft/index`. Open, Show in folder and
 the default external editor use `xdg-open`; set `FINDCRAFT_EDITOR` (or the setting) to use another

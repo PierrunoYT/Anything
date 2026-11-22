@@ -113,6 +113,9 @@ All notable changes to this project are documented here. The format follows
 - Pressing Enter on a focused button in Settings or Help (such as "Delete cached indexes") opened
   the selected search result instead, and the arrows and other result shortcuts moved or acted on
   the results behind the dialog. Result shortcuts now wait until Settings and Help are closed.
+- On Linux and macOS the folder scan no longer runs until memory runs out on a bind mount that
+  shows a folder inside itself (such as `mount --bind / /mnt/root`). Each folder is entered once;
+  a second path to it is listed but not entered and counted as not followed.
 - The folder scan now counts every folder it lists but does not enter. On Linux and macOS, `/proc`,
   `/sys`, `/dev`, `/run`, `/System/Volumes` and symbolic links to folders were left out of the
   count, so the status bar presented the index as complete.

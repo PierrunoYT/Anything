@@ -1844,7 +1844,7 @@ fn drive_chip(ui: &mut egui::Ui, s: &crate::indexer::VolumeStatus) {
             }
             if s.not_followed > 0 {
                 tip.push_str(&format!(
-                    "\n{} linked folders (junctions, symbolic links, mounted drives) were not entered",
+                    "\n{} folders (links, mounted drives, system folders, repeated paths) were not entered",
                     group_digits(s.not_followed)
                 ));
             }
