@@ -25,6 +25,7 @@ use memchr::memmem;
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering as AtomicOrdering};
 use std::time::{Duration, Instant};
@@ -586,7 +587,9 @@ fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() 
                     })
                 })
                 .collect();
-            handles.into_iter().filter_map(|h| h.join().ok()).collect()
+            // A worker's panic is a bug: pass it on, so the request is answered with an error
+            // (see `Searcher::start`) rather than taken for a cancelled one.
+            handles.into_iter().map(|h| h.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))).collect()
         });
         let mut found = vec![None; parts.len()];
         for (i, part) in done.into_iter().flatten() {
@@ -595,7 +598,7 @@ fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() 
         found
     };
 
-    // A part that is missing (cancelled, or its worker panicked) leaves no result.
+    // A missing part was cancelled.
     let found: Vec<Vec<u32>> = found.into_iter().collect::<Option<_>>()?;
     let mut sizes = vec![0; volumes.len()];
     for (&(vol, _), part) in parts.iter().zip(&found) {
@@ -819,30 +822,34 @@ impl Searcher {
                     let start = Instant::now();
                     let generation = req.generation;
                     let cancelled = || latest_bg.load(AtomicOrdering::Relaxed) != generation;
-                    everything.use_snapshot(&req.index.volumes);
-
-                    let (hits, error) = match Query::parse(&req.text, req.options) {
-                        Ok(q) if q.is_empty() => match everything.get(req.sort) {
-                            Some(hits) => (hits, None),
-                            None => match search(&req.index, &q, req.sort, &cancelled) {
-                                Some(h) => {
-                                    let h = Arc::new(h);
+                    // A panic here (a bug, in the search or the ranker) answers this request with
+                    // an error instead of leaving the caller waiting, and the thread goes on: the
+                    // cache only changes once a search has finished, so nothing is left half done.
+                    let answer = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                        everything.use_snapshot(&req.index.volumes);
+                        let (hits, error) = match Query::parse(&req.text, req.options) {
+                            Ok(q) if q.is_empty() => match everything.get(req.sort) {
+                                Some(hits) => (hits, None),
+                                None => {
+                                    let h = Arc::new(search(&req.index, &q, req.sort, &cancelled)?);
                                     everything.insert(req.sort, Arc::clone(&h));
                                     (h, None)
                                 }
-                                None => continue,
                             },
-                        },
-                        Ok(q) => match search(&req.index, &q, req.sort, &cancelled) {
-                            Some(h) => (Arc::new(h), None),
-                            None => continue,
-                        },
-                        Err(e) => (Arc::new(Vec::new()), Some(e)),
+                            Ok(q) => (Arc::new(search(&req.index, &q, req.sort, &cancelled)?), None),
+                            Err(e) => (Arc::new(Vec::new()), Some(e)),
+                        };
+                        if cancelled() {
+                            return None;
+                        }
+                        let top = ranker.as_ref().map_or_else(Vec::new, |rank| rank(&req.index, &hits, &req.text));
+                        Some((hits, top, error))
+                    }));
+                    let (hits, top, error) = match answer {
+                        Ok(Some(answer)) => answer,
+                        Ok(None) => continue,
+                        Err(_) => (Arc::new(Vec::new()), Vec::new(), Some("This search failed (an internal error).".into())),
                     };
-                    if cancelled() {
-                        continue;
-                    }
-                    let top = ranker.as_ref().map_or_else(Vec::new, |rank| rank(&req.index, &hits, &req.text));
                     let response = Response {
                         generation,
                         index: req.index,
@@ -918,15 +925,37 @@ mod tests {
         assert!(res.top.is_empty());
     }
 
+    /// A panic while answering a request (a filter worker's used to be taken for a cancelled
+    /// search) left the caller showing a spinner forever. Now that request gets an error, and
+    /// later ones are answered as usual.
+    #[test]
+    fn a_panicking_search_is_answered_with_an_error() {
+        let ranker: Ranker = Box::new(|_, hits, text| {
+            assert_ne!(text, "main", "ranker failed (expected by this test)");
+            hits.to_vec()
+        });
+        let mut searcher = Searcher::with_ranker(|| {}, ranker);
+        let index = Index::default().with_volume(Arc::new(sample()));
+        let failed = searcher.submit(index.clone(), "main", SearchOptions::default(), Sort::default());
+        let res = searcher.results.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(res.generation, failed);
+        assert!(res.error.is_some());
+        assert!(res.hits.is_empty());
+        let generation = searcher.submit(index, "big", SearchOptions::default(), Sort::default());
+        let res = searcher.results.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(res.generation, generation);
+        assert_eq!((res.error, res.hits.len()), (None, 1));
+    }
+
     /// Once the search thread has died, a request used to vanish: the caller showed a spinner
     /// forever. Now it gets an error response for that generation.
     #[test]
     fn requests_to_a_dead_search_thread_get_an_error() {
-        let ranker: Ranker = Box::new(|_, _, _| panic!("ranker failed (expected by this test)"));
-        let mut searcher = Searcher::with_ranker(|| {}, ranker);
+        let mut searcher = Searcher::new(|| panic!("result callback failed (expected by this test)"));
         let index = Index::default().with_volume(Arc::new(sample()));
-        // The first request kills the thread; a later one finds it gone.
-        searcher.submit(index.clone(), "main", SearchOptions::default(), Sort::default());
+        // The callback after the first result kills the thread; a later request finds it gone.
+        let first = searcher.submit(index.clone(), "main", SearchOptions::default(), Sort::default());
+        assert_eq!(searcher.results.recv_timeout(Duration::from_secs(10)).unwrap().generation, first);
         let deadline = Instant::now() + Duration::from_secs(10);
         let res = loop {
             assert!(Instant::now() < deadline, "no error response");

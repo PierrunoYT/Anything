@@ -175,7 +175,10 @@ The `Searcher` runs on a background thread. Every keystroke submits a request wi
 generation number; running searches check it periodically and abandon stale work, and only the
 newest result is shown. Each response carries the `Index` snapshot its hits refer to, so the UI
 never mixes ids from different snapshots. The unfiltered lists of the last two sort orders used
-are cached per snapshot, so clearing the query is instant.
+are cached per snapshot, so clearing the query is instant. A panic while answering a request (in
+a filter worker, the merge or the ranker) is caught on the searcher's thread and answered with an
+error for that generation; the thread keeps serving later requests. If the thread is gone anyway,
+`submit` answers with an error itself, so the UI never waits for a result that cannot come.
 
 ## UI
 
