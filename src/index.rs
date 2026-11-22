@@ -20,11 +20,15 @@ pub const ATTR_REPARSE_POINT: u32 = 0x400;
 /// Path depth that [`VolumeIndex::write_path`] handles without allocating.
 const CHAIN_STACK: usize = 512;
 
-/// `idx` and its ancestors up to, but not including, the root. The count bound only matters if
-/// the links were corrupt; it stops a loop rather than truncating a valid path.
+/// `idx` and its ancestors up to, but not including, the root. A chain detached from the root
+/// (it reaches an entry with no parent, such as a slot `VolumeBuilder::set` never filled) ends
+/// at that entry, as it does in `write_path`'s first loop. The count bound only matters if the
+/// links were corrupt; it stops a loop rather than truncating a valid path.
 fn ancestors(entries: &[Entry], idx: u32) -> impl Iterator<Item = u32> + '_ {
-    std::iter::successors(Some(idx), |&i| Some(entries[i as usize].parent))
-        .take_while(|&i| i != 0 && i != NONE)
+    // `successors` computes the next item as it yields the current one, so the parent of every
+    // yielded id is looked up, including `NONE`, which `get` turns into the end.
+    std::iter::successors(Some(idx), |&i| entries.get(i as usize).map(|e| e.parent))
+        .take_while(|&i| i != 0 && (i as usize) < entries.len())
         .take(entries.len())
 }
 
@@ -111,7 +115,8 @@ impl VolumeIndex {
     }
 
     /// Appends the full path of `idx` (e.g. `C:\Users\me\file.txt`) to `buf`, however deep.
-    /// Parent links are acyclic and end at the root (checked when a cache is loaded).
+    /// Parent links are acyclic and end at the root (checked when a cache is loaded); a chain
+    /// detached from the root is written from its topmost entry, however deep.
     pub fn write_path(&self, idx: u32, buf: &mut String, lowercase: bool) {
         let mut stack = [0u32; CHAIN_STACK];
         let mut depth = 0;
@@ -1343,6 +1348,24 @@ pub mod tests {
         let loaded = VolumeIndex::load(&path, 'C');
         let _ = fs::remove_file(&path);
         assert_eq!(loaded.unwrap().full_path(file), expected);
+    }
+
+    /// A path deeper than 512 levels whose top folder hangs off a slot that was never filled
+    /// panicked (`entries[u32::MAX]`) instead of being written from its topmost entry like a
+    /// shallow one.
+    #[test]
+    fn deep_detached_paths_do_not_panic() {
+        let path_of = |depth: u32| {
+            let mut b = VolumeBuilder::new('C');
+            // Slot 1 is never set, so it has no parent and an empty name.
+            for id in 2..2 + depth {
+                b.set(id, "d", id - 1, ATTR_DIRECTORY, 0, 0);
+            }
+            b.set(2 + depth, "f", 1 + depth, 0, 1, 0);
+            b.finish(Source::Walk, Duration::ZERO).full_path(2 + depth)
+        };
+        assert_eq!(path_of(3), native(&format!(r"C:\{}\f", r"\d".repeat(3))));
+        assert_eq!(path_of(600), native(&format!(r"C:\{}\f", r"\d".repeat(600))));
     }
 
     #[test]

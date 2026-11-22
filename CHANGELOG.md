@@ -131,6 +131,9 @@ All notable changes to this project are documented here. The format follows
 - Fast NTFS indexing no longer loses records that lie in a sparse run of the master file table:
   they were read as zeros, so those files and everything under them silently went missing. Such
   a table now fails the read, and the folder scan indexes the drive instead.
+- Showing the path of an entry more than 512 folders deep whose top folder was never filled in
+  (a slot left empty while building the index) crashed FindCraft. The path is now written from
+  its topmost folder, as it already was for shallower entries.
 - On Linux and macOS the Date Modified column showed UTC times and `dm:today`, `dm:yesterday` and
   `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
   the system time zone (`TZ` or `/etc/localtime`), and each date starts at its own local midnight,
