@@ -173,6 +173,8 @@ fn read_records(
     // `buf[..filled]` holds $MFT from byte `frn * record_size`: at most a partial record
     // between reads.
     let (mut frn, mut filled) = (0usize, 0usize);
+    // Extension records read before their base record, kept (fixed up) until it is read.
+    let mut deferred: Vec<(usize, Vec<u8>)> = Vec::new();
     // `mft_runs` keeps every run inside the volume, so these byte offsets cannot overflow.
     'runs: for &(lcn, clusters) in runs {
         let run_bytes = clusters * cluster;
@@ -194,7 +196,13 @@ fn read_records(
             done += want as u64;
             let whole = filled - filled % record_size;
             for record in buf[..whole].chunks_exact_mut(record_size) {
-                parse_record(record, frn, recs, names, links)?;
+                if parse_record(record, frn, recs, names, links)? == Parsed::Deferred {
+                    deferred.try_reserve(1).map_err(|_| out_of_memory())?;
+                    let mut copy = Vec::new();
+                    copy.try_reserve_exact(record_size).map_err(|_| out_of_memory())?;
+                    copy.extend_from_slice(record);
+                    deferred.push((frn, copy));
+                }
                 frn += 1;
             }
             buf.copy_within(whole..filled, 0);
@@ -204,6 +212,9 @@ fn read_records(
     }
     if frn < record_count {
         anyhow::bail!("$MFT data runs covered {frn} of {record_count} records");
+    }
+    for (frn, record) in &deferred {
+        parse_fixed_record(record, *frn, recs, names, links, false)?;
     }
     Ok(())
 }
@@ -325,22 +336,62 @@ fn resident_value(attr: &[u8]) -> Option<&[u8]> {
     attr.get(off..off.checked_add(len)?)
 }
 
+/// What [`parse_record`] did with a record.
+#[derive(Debug, PartialEq, Eq)]
+enum Parsed {
+    /// Parsed, or skipped as unused or invalid.
+    Done,
+    /// An extension record whose base record comes later in $MFT. Its base reference can only
+    /// be checked once the base is read, so the caller parses the fixed-up record again then
+    /// ([`parse_fixed_record`] with `defer` false).
+    Deferred,
+}
+
 /// Parses one record into `recs`. Fails only when the name arena or the hard-link list cannot
 /// grow, so a volume too big for the memory available falls back to the folder scan instead of
 /// aborting the process.
-fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut String, links: &mut Vec<Link>) -> anyhow::Result<()> {
+fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut String, links: &mut Vec<Link>) -> anyhow::Result<Parsed> {
     // The flags (0x16) and base reference (0x20) below must lie inside the record.
     if record.len() < RECORD_HEADER_LEN || !apply_fixup(record) {
-        return Ok(());
+        return Ok(Parsed::Done);
     }
+    parse_fixed_record(record, frn, recs, names, links, true)
+}
+
+/// [`parse_record`] for a record whose fixups are applied. With `defer`, an extension record
+/// whose base record is not read yet is left for later instead of parsed.
+fn parse_fixed_record(
+    record: &[u8],
+    frn: usize,
+    recs: &mut [Rec],
+    names: &mut String,
+    links: &mut Vec<Link>,
+    defer: bool,
+) -> anyhow::Result<Parsed> {
     let flags = u16_at(record, 0x16);
     if flags & RECORD_IN_USE == 0 {
-        return Ok(());
+        return Ok(Parsed::Done);
     }
-    // Extension records hold overflow attributes of a base record.
-    let base = (u64_at(record, 0x20) & REF_MASK) as usize;
-    let target = if base != 0 { base } else { frn };
-    let Some(rec) = recs.get_mut(target) else { return Ok(()) };
+    // Extension records hold overflow attributes of a base record. The base reference carries
+    // the base record's sequence number: a stale extension record (its base deleted and the
+    // record reused) must not lend its names and sizes to the new file.
+    let base_ref = u64_at(record, 0x20);
+    let base = (base_ref & REF_MASK) as usize;
+    if base >= recs.len() {
+        return Ok(Parsed::Done);
+    }
+    if base != 0 && base >= frn && defer {
+        return Ok(Parsed::Deferred);
+    }
+    let target = if base == 0 {
+        frn
+    } else {
+        match referenced(recs, base_ref).filter(|&b| recs[b].in_use) {
+            Some(b) => b,
+            None => return Ok(Parsed::Done),
+        }
+    };
+    let Some(rec) = recs.get_mut(target) else { return Ok(Parsed::Done) };
     if base == 0 {
         rec.in_use = true;
         rec.is_dir = flags & RECORD_IS_DIRECTORY != 0;
@@ -409,7 +460,7 @@ fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut Str
             _ => {}
         }
     }
-    Ok(())
+    Ok(Parsed::Done)
 }
 
 /// `(starting LCN or None when sparse, length in clusters)`, in VCN order.
@@ -961,6 +1012,38 @@ mod tests {
         assert_eq!(progress.load(Ordering::Relaxed), 3);
     }
 
+    /// An extension record's base reference carries the base record's sequence number. A stale
+    /// extension (its base deleted and the record reused) used to lend its names and size to
+    /// the new file; it is now dropped. An extension stored before its base is still merged.
+    #[test]
+    fn extension_records_need_a_matching_base() {
+        const CLUSTER: u64 = 4096;
+        let dir = RECORD_IN_USE | RECORD_IS_DIRECTORY;
+        let mut mft = vec![0u8; 20 * RECORD];
+        let mut put = |frn: usize, r: Vec<u8>| mft[frn * RECORD..(frn + 1) * RECORD].copy_from_slice(&r);
+        put(5, record(dir, 0, &[file_name(5, ".", 3)]));
+        // Extension of record 18, stored before it.
+        put(16, record(RECORD_IN_USE, 18 | (1 << 48), &[file_name(5, "early.txt", 1), non_resident_data(7, &[0x11, 0x01, 0x05])]));
+        // Extension of record 19's previous file (sequence 1); 19 now holds sequence 2.
+        put(17, record(RECORD_IN_USE, 19 | (1 << 48), &[file_name(5, "stale.txt", 1), non_resident_data(999, &[0x11, 0x01, 0x05])]));
+        put(18, record(RECORD_IN_USE, 0, &[]));
+        put(19, record_seq(2, RECORD_IN_USE, 0, &[file_name(5, "new.txt", 1)]));
+        let mut read = |offset: u64, buf: &mut [u8]| {
+            let o = offset as usize;
+            buf.copy_from_slice(&mft[o..o + buf.len()]);
+            Ok(())
+        };
+        let (mut recs, mut names, mut links) = (vec![Rec::default(); 20], String::new(), Vec::new());
+        let progress = AtomicUsize::new(0);
+        read_records(&[(Some(0), 5)], CLUSTER, RECORD, &mut recs, &mut names, &mut links, &progress, &AtomicBool::new(false), &mut read)
+            .unwrap();
+
+        let v = build('C', &recs, &names, &links, Instant::now()).unwrap();
+        let mut files: Vec<(String, u64)> = v.by_name.iter().map(|&i| (v.full_path(i), v.entry(i).size)).collect();
+        files.sort();
+        assert_eq!(files, [(native(r"C:\early.txt"), 7), (native(r"C:\new.txt"), 0)]);
+    }
+
     /// FC-10: a record shorter than the fixed header is ignored rather than read out of bounds.
     #[test]
     fn short_records_are_ignored() {
@@ -1096,7 +1179,7 @@ mod tests {
             // DOS short name first, then the long name: the long name must win.
             (17, record(RECORD_IN_USE, 0, &[standard_info(3, 0x20), file_name(16, "REPORT~1.DOC", 2), file_name(16, "Report final.docx", 1)])),
             // Data attribute stored in an extension record (18) of base record 17.
-            (18, record(RECORD_IN_USE, 17, &[non_resident_data(12345, &[0x11, 0x01, 0x05])])),
+            (18, record(RECORD_IN_USE, 17 | (1 << 48), &[non_resident_data(12345, &[0x11, 0x01, 0x05])])),
             // Child of a metadata file ($Extend = 11) must be dropped.
             (19, record(RECORD_IN_USE, 0, &[standard_info(4, 0), file_name(11, "$ObjId", 3)])),
         ];

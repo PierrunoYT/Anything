@@ -42,7 +42,9 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   records) is put together from both. For each record it
   applies the update-sequence fixups (rejecting torn records) and parses `$STANDARD_INFORMATION`
   (mtime, attributes), `$FILE_NAME` (parent, name; Win32 names are preferred over DOS 8.3 names)
-  and the unnamed `$DATA` attribute (size). Extension records are merged into their base record.
+  and the unnamed `$DATA` attribute (size). Extension records are merged into their base record
+  when the base reference's sequence number matches the base record's; an extension stored before
+  its base is kept until the base is read.
   Only records reachable from the root (record 5) through valid parents are kept, which drops the
   NTFS metadata files and anything under `$Extend`. A parent reference is valid only when its
   sequence number matches the parent record's (the volume is read live, so a record can be reused
