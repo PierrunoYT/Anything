@@ -113,6 +113,9 @@ All notable changes to this project are documented here. The format follows
 - Pressing Enter on a focused button in Settings or Help (such as "Delete cached indexes") opened
   the selected search result instead, and the arrows and other result shortcuts moved or acted on
   the results behind the dialog. Result shortcuts now wait until Settings and Help are closed.
+- Fast NTFS indexing no longer aborts FindCraft when memory runs out while it stores the names and
+  hard links of a huge volume: only the record table was allocated with a fallback, the names
+  and links grew without one. Running out of memory there now falls back to the folder scan too.
 - Fast NTFS indexing no longer loses records that lie in a sparse run of the master file table:
   they were read as zeros, so those files and everything under them silently went missing. Such
   a table now fails the read, and the folder scan indexes the drive instead.

@@ -129,22 +129,25 @@ pub fn read_volume(_: char, _: &AtomicUsize, _: &AtomicUsize, _: &AtomicBool) ->
     anyhow::bail!("MFT indexing is only available on Windows")
 }
 
+fn out_of_memory() -> anyhow::Error {
+    anyhow::anyhow!("not enough memory to read the $MFT")
+}
+
 /// `n` copies of `value`, or an error instead of aborting when the memory is not available.
 fn try_filled<T: Clone>(n: usize, value: T) -> anyhow::Result<Vec<T>> {
     let mut v = Vec::new();
-    v.try_reserve_exact(n).map_err(|_| anyhow::anyhow!("not enough memory to read the $MFT"))?;
+    v.try_reserve_exact(n).map_err(|_| out_of_memory())?;
     v.resize(n, value);
     Ok(v)
 }
 
 /// The per-record state and the name arena for `record_count` records. Allocated fallibly: a
-/// table too big for the memory available fails, and the folder scan runs instead.
+/// table too big for the memory available fails, and the folder scan runs instead. The arena
+/// and the hard-link list also grow fallibly past this estimate ([`parse_record`]).
 fn record_state(record_count: usize) -> anyhow::Result<(Vec<Rec>, String)> {
     let recs = try_filled(record_count, Rec::default())?;
     let mut names = String::new();
-    names
-        .try_reserve(record_count.saturating_mul(16))
-        .map_err(|_| anyhow::anyhow!("not enough memory to read the $MFT"))?;
+    names.try_reserve(record_count.saturating_mul(16)).map_err(|_| out_of_memory())?;
     Ok((recs, names))
 }
 
@@ -191,7 +194,7 @@ fn read_records(
             done += want as u64;
             let whole = filled - filled % record_size;
             for record in buf[..whole].chunks_exact_mut(record_size) {
-                parse_record(record, frn, recs, names, links);
+                parse_record(record, frn, recs, names, links)?;
                 frn += 1;
             }
             buf.copy_within(whole..filled, 0);
@@ -322,19 +325,22 @@ fn resident_value(attr: &[u8]) -> Option<&[u8]> {
     attr.get(off..off.checked_add(len)?)
 }
 
-fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut String, links: &mut Vec<Link>) {
+/// Parses one record into `recs`. Fails only when the name arena or the hard-link list cannot
+/// grow, so a volume too big for the memory available falls back to the folder scan instead of
+/// aborting the process.
+fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut String, links: &mut Vec<Link>) -> anyhow::Result<()> {
     // The flags (0x16) and base reference (0x20) below must lie inside the record.
     if record.len() < RECORD_HEADER_LEN || !apply_fixup(record) {
-        return;
+        return Ok(());
     }
     let flags = u16_at(record, 0x16);
     if flags & RECORD_IN_USE == 0 {
-        return;
+        return Ok(());
     }
     // Extension records hold overflow attributes of a base record.
     let base = (u64_at(record, 0x20) & REF_MASK) as usize;
     let target = if base != 0 { base } else { frn };
-    let Some(rec) = recs.get_mut(target) else { return };
+    let Some(rec) = recs.get_mut(target) else { return Ok(()) };
     if base == 0 {
         rec.in_use = true;
         rec.is_dir = flags & RECORD_IS_DIRECTORY != 0;
@@ -376,9 +382,11 @@ fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut Str
                 }
                 let name_off = names.len() as u32;
                 let name_len = name.len().min(u16::MAX as usize) as u16;
+                names.try_reserve(name.len()).map_err(|_| out_of_memory())?;
                 names.push_str(&name);
                 let parent = u64_at(v, 0);
                 if another_link {
+                    links.try_reserve(1).map_err(|_| out_of_memory())?;
                     links.push(Link { frn: target, parent, name_off, name_len });
                     continue;
                 }
@@ -401,6 +409,7 @@ fn parse_record(record: &mut [u8], frn: usize, recs: &mut [Rec], names: &mut Str
             _ => {}
         }
     }
+    Ok(())
 }
 
 /// `(starting LCN or None when sparse, length in clusters)`, in VCN order.
@@ -962,7 +971,7 @@ mod tests {
         short[0x16..0x18].copy_from_slice(&RECORD_IN_USE.to_le_bytes()); // so the base reference at 0x20 is read
         short[0x1E..0x20].copy_from_slice(&[0, 0]); // matches the zero sequence number at 8
         let mut recs = vec![Rec::default(); 4];
-        parse_record(&mut short, 1, &mut recs, &mut String::new(), &mut Vec::new());
+        parse_record(&mut short, 1, &mut recs, &mut String::new(), &mut Vec::new()).unwrap();
         assert!(!recs[1].in_use);
     }
 
@@ -1014,7 +1023,7 @@ mod tests {
             ),
         ];
         for (frn, rec) in raw.iter_mut() {
-            parse_record(rec, *frn, &mut recs, &mut names, &mut links);
+            parse_record(rec, *frn, &mut recs, &mut names, &mut links).unwrap();
         }
         assert_eq!(links.len(), 2);
 
@@ -1042,7 +1051,7 @@ mod tests {
             (18, record(RECORD_IN_USE, 0, &[file_name_ref(16 | (2 << 48), "new child.txt", 1), file_name(16, "old link.txt", 1)])),
         ];
         for (frn, rec) in raw.iter_mut() {
-            parse_record(rec, *frn, &mut recs, &mut names, &mut links);
+            parse_record(rec, *frn, &mut recs, &mut names, &mut links).unwrap();
         }
 
         let v = build('C', &recs, &names, &links, Instant::now()).unwrap();
@@ -1068,7 +1077,7 @@ mod tests {
             let mut raw = vec![(16, record(dir, 0, &[file_name(5, "Users", 3)]))];
             raw.extend(root.map(|r| (5, r)));
             for (frn, rec) in raw.iter_mut() {
-                parse_record(rec, *frn, &mut recs, &mut names, &mut links);
+                parse_record(rec, *frn, &mut recs, &mut names, &mut links).unwrap();
             }
             assert!(build('C', &recs, &names, &links, Instant::now()).is_err());
         }
@@ -1093,7 +1102,7 @@ mod tests {
         ];
         let mut links = Vec::new();
         for (frn, rec) in raw.iter_mut() {
-            parse_record(rec, *frn, &mut recs, &mut names, &mut links);
+            parse_record(rec, *frn, &mut recs, &mut names, &mut links).unwrap();
         }
         assert!(links.is_empty(), "a DOS alias is not another link");
 
