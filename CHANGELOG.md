@@ -146,6 +146,9 @@ All notable changes to this project are documented here. The format follows
   `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
   the system time zone (`TZ` or `/etc/localtime`), and each date starts at its own local midnight,
   also across a daylight-saving change, as on Windows.
+- The quick search bar no longer refuses to open names that end in a dot or space, or that look
+  like a device name (`CON`, `NUL.txt`), on systems other than Windows. Only Windows' shell would
+  open a different item for those; the main window already made this check on Windows only.
 - Turning quick search off no longer freezes the window for up to a second while the hotkey thread
   removes the tray icon. The thread is only asked to stop; turning quick search back on waits on
   its own thread for the old hotkey to be freed, and FindCraft waits for the icon after its window

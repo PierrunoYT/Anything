@@ -302,8 +302,9 @@ impl QuickBar {
                 ctx.copy_text(full);
                 Ok(())
             }
-            // The shell would act on a different item for these, as in the main window (FC-15).
-            _ if win32_alias(&full) => Err(std::io::Error::other(
+            // The shell would act on a different item for these, as in the main window (FC-15);
+            // elsewhere such names are ordinary.
+            _ if cfg!(windows) && win32_alias(&full) => Err(std::io::Error::other(
                 "the name ends in a dot or space or is a device name, so Windows would open a different item",
             )),
             // The shell can block for seconds (slow share, placeholder, handler load), and this
