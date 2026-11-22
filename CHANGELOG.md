@@ -455,6 +455,9 @@ All notable changes to this project are documented here. The format follows
   still created a missing `index` or `backup` folder inside the link's target before refusing
   the write. The data folders are now checked from the outermost down, and a missing one is only
   created once the folder above it passed, so nothing is created through a link.
+- Another program can no longer stop FindCraft from starting by creating a window with the class
+  name of FindCraft's hidden window: every start took it for a running FindCraft, asked it to show
+  itself and exited. A window now only counts if its process runs the same FindCraft executable.
 - Another program can no longer switch off the quick search hotkey and tray icon by posting one
   message to FindCraft's hidden window, whose class name is fixed and easy to find. The private
   stop message now has to carry a random value only FindCraft knows, and is ignored otherwise.

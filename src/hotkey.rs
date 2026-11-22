@@ -212,10 +212,12 @@ mod platform {
     use std::rc::Rc;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
-    use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, RECT, WPARAM};
     use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromWindow};
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcessId, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
+    };
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{HOT_KEY_MODIFIERS, MOD_NOREPEAT, RegisterHotKey, UnregisterHotKey};
     use windows_sys::Win32::UI::Shell::{
         NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_SETVERSION, NIN_SELECT, NINF_KEY, NOTIFYICON_VERSION_4,
@@ -223,7 +225,7 @@ mod platform {
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AllowSetForegroundWindow, AppendMenuW, CW_USEDEFAULT, ChangeWindowMessageFilterEx, CreatePopupMenu, CreateWindowExW,
-        DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowExW, FindWindowW,
+        DefWindowProcW, DestroyMenu, DestroyWindow, DispatchMessageW, FindWindowExW,
         GetForegroundWindow, GetMessageW, GetSystemMetrics, GetWindowRect, GetWindowThreadProcessId, HICON, IMAGE_ICON,
         IsWindowVisible, LR_SHARED, LoadImageW, MF_STRING, MSG, MSGFLT_ALLOW, PostMessageW, PostQuitMessage, RegisterClassW,
         RegisterWindowMessageW, SM_CXSMICON, SM_CYSMICON, SW_HIDE, SW_SHOWNORMAL, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOSIZE,
@@ -664,22 +666,60 @@ mod platform {
         }
     }
 
+    /// The full Win32 path of a process's executable, or `None` if it cannot be read.
+    fn process_image(pid: u32) -> Option<String> {
+        let mut path = vec![0u16; 32_768];
+        let mut len = path.len() as u32;
+        // SAFETY: `len` is the buffer's length in characters, which the call replaces with the
+        // length it wrote; the handle is checked before use and closed after it. Limited query
+        // access is granted for elevated processes too.
+        let ok = unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process.is_null() {
+                return None;
+            }
+            let ok = QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, path.as_mut_ptr(), &mut len) != 0;
+            CloseHandle(process);
+            ok
+        };
+        ok.then(|| String::from_utf16_lossy(&path[..len as usize]))
+    }
+
     /// If FindCraft is already running in the background, asks it to show its window and returns
     /// `true`. Otherwise a second start would quietly load every index a second time.
+    ///
+    /// The class name is no secret, so a window of that class only counts if it belongs to a
+    /// process running this same executable; anything else would make every start exit at once.
     pub fn activate_running_instance() -> bool {
+        // SAFETY: plain Win32 call.
+        let own_pid = unsafe { GetCurrentProcessId() };
+        let Some(own_image) = process_image(own_pid) else { return false };
+        let own_image = own_image.to_lowercase();
         let class = wide(CLASS_NAME);
-        // SAFETY: `class` is NUL-terminated and outlives the call; the other calls take the window
-        // just found, and fail harmlessly if it has gone in the meantime.
-        unsafe {
-            let hwnd = FindWindowW(class.as_ptr(), std::ptr::null());
+        let mut after: HWND = std::ptr::null_mut();
+        loop {
+            // SAFETY: `class` is NUL-terminated and outlives the call; `after` is null or a window
+            // this loop was just given.
+            let hwnd = unsafe { FindWindowExW(std::ptr::null_mut(), after, class.as_ptr(), std::ptr::null()) };
             if hwnd.is_null() {
                 return false;
             }
             let mut pid = 0;
-            GetWindowThreadProcessId(hwnd, &mut pid);
-            // We were just started by the user, so we may pass the foreground on.
-            AllowSetForegroundWindow(pid);
-            PostMessageW(hwnd, WM_SHOW_MAIN, 0, 0) != 0
+            // SAFETY: `pid` is a valid place to write the process id to.
+            unsafe {
+                GetWindowThreadProcessId(hwnd, &mut pid);
+            }
+            // Paths compare without case, as the file system does: a shortcut and a command line
+            // may spell the same executable differently.
+            if pid != own_pid && process_image(pid).is_some_and(|image| image.to_lowercase() == own_image) {
+                // SAFETY: plain Win32 calls; they fail harmlessly if the window has gone meanwhile.
+                // We were just started by the user, so we may pass the foreground on.
+                return unsafe {
+                    AllowSetForegroundWindow(pid);
+                    PostMessageW(hwnd, WM_SHOW_MAIN, 0, 0) != 0
+                };
+            }
+            after = hwnd;
         }
     }
 

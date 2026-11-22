@@ -24,8 +24,8 @@ fn main() -> eframe::Result {
         std::process::exit(mft_helper::run_helper(&pipe));
     }
 
-    // Closing the window keeps FindCraft running in the notification area, so starting it again
-    // means "show me the window".
+    // Closing the window keeps FindCraft running in the notification area, so starting the same
+    // executable again means "show me the window".
     if hotkey::activate_running_instance() {
         return Ok(());
     }

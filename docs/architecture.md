@@ -200,7 +200,8 @@ the background thread) lives in `logic`, and these two parts work without the wi
   The bar then takes the foreground from its own thread once it is visible: the process that
   receives a hotkey may do that, but a window that is not shown yet cannot take keystrokes. The
   window class also identifies a running instance, which a second start asks to show its window
-  before exiting.
+  before exiting. Since any program can register that class name, a window only counts if its
+  process runs the same executable (`QueryFullProcessImageNameW`, compared without case).
 - **Bar** (`quick_bar.rs`) — a *deferred* viewport, which renders on its own; an immediate one only
   renders inside its parent's pass, which does not run for a hidden window. Its state is therefore
   behind a mutex, and it has its own `Searcher`. The main window passes it each new index snapshot.

@@ -2,8 +2,8 @@
 
 FindCraft indexes every file and folder on your fixed drives and finds them as you type,
 like [Everything](https://www.voidtools.com/). Start `FindCraft.exe`; there are no command-line options (FindCraft starts its own NTFS
-helper with an internal one). When it is already running in the notification area, starting it again
-shows its window.
+helper with an internal one). When it is already running in the notification area, starting the
+same `FindCraft.exe` again shows its window; a copy elsewhere on disk starts on its own.
 
 ## On Linux
 
