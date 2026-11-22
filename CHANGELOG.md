@@ -146,6 +146,10 @@ All notable changes to this project are documented here. The format follows
   `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
   the system time zone (`TZ` or `/etc/localtime`), and each date starts at its own local midnight,
   also across a daylight-saving change, as on Windows.
+- Properties (`Alt+Enter` or the context menu) showed no dialog. The shell builds the dialog on a
+  thread of its own that, while starting, needs the thread that asked for it to handle messages,
+  and that worker thread ended as soon as the request was made. It now keeps handling messages
+  until the dialog closes.
 - When the quick search bar was told to close (such as by `Alt+F4`) just as the hotkey reopened
   it, the bar stayed open but counted as closed, so the next hotkey press seemed to do nothing.
   The reopen now wins, and the next press closes the bar.

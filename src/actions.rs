@@ -13,7 +13,8 @@ fn wide(s: &str) -> Vec<u16> {
 /// to `done` there. The shell resolves associations, loads handlers and builds item lists for
 /// the path, which takes seconds on a slow network share or a cloud placeholder, so these calls
 /// must not block the UI thread. The thread enters a single-threaded COM apartment, which shell
-/// handlers expect, and [`shell_execute`] waits for the launch to finish before the thread ends.
+/// handlers expect, and [`shell_execute`] waits for the launch to finish before the thread ends;
+/// [`properties`] keeps it until the dialog has closed.
 pub fn in_background(
     action: impl FnOnce() -> io::Result<()> + Send + 'static,
     done: impl FnOnce(io::Result<()>) + Send + 'static,
@@ -185,15 +186,102 @@ fn select_arg(path: &Path) -> io::Result<String> {
 }
 
 /// Shows the Windows file properties dialog.
+///
+/// The shell builds the dialog on a thread of its own, which calls back into this thread's COM
+/// apartment while it starts. If this thread stops handling messages (it ends, as the ones
+/// [`in_background`] start do), the dialog never appears. So this thread keeps handling them until
+/// the dialog has closed.
 pub fn properties(path: &Path) -> io::Result<()> {
     #[cfg(windows)]
     {
-        shell_execute("properties", path, windows_sys::Win32::UI::Shell::SEE_MASK_INVOKEIDLIST)
+        let before = sheet::dialogs();
+        shell_execute("properties", path, windows_sys::Win32::UI::Shell::SEE_MASK_INVOKEIDLIST)?;
+        sheet::pump_until_closed(&before);
+        Ok(())
     }
     #[cfg(not(windows))]
     {
         let _ = path;
         Err(io::Error::other("not supported on this platform"))
+    }
+}
+
+/// Keeps a thread that asked for a property sheet handling messages for it. The sheet tells no one
+/// when it closes (on Windows 11 its thread takes no `SHSetInstanceExplorer` process reference), so
+/// its window is found as the visible dialog of this process that was not there before.
+#[cfg(windows)]
+mod sheet {
+    use std::time::{Duration, Instant};
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::System::Threading::GetCurrentProcessId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, EnumWindows, GetClassNameW, GetWindowThreadProcessId, IsWindow, IsWindowVisible, MSG,
+        MWMO_INPUTAVAILABLE, MsgWaitForMultipleObjectsEx, PM_REMOVE, PeekMessageW, QS_ALLINPUT, TranslateMessage,
+    };
+    use windows_sys::core::BOOL;
+
+    /// How long a thread waits for a sheet to appear. A slow share or handler delays it, and a
+    /// sheet that is never shown (an item that has gone) has to end the wait too.
+    const START_WAIT: Duration = Duration::from_secs(30);
+    /// How often the thread looks for the sheet's window, or whether it still exists.
+    const POLL: Duration = Duration::from_millis(100);
+
+    /// The visible dialog windows (class `#32770`, which property sheets have) of this process.
+    pub fn dialogs() -> Vec<HWND> {
+        unsafe extern "system" fn collect(hwnd: HWND, found: LPARAM) -> BOOL {
+            let mut class = [0u16; 8];
+            let mut pid = 0;
+            // SAFETY: `found` is the vector `dialogs` passed, alive and not otherwise borrowed
+            // during `EnumWindows`; the class buffer's length is passed.
+            unsafe {
+                let len = GetClassNameW(hwnd, class.as_mut_ptr(), class.len() as i32) as usize;
+                GetWindowThreadProcessId(hwnd, &mut pid);
+                let dialog = class[..len].iter().copied().eq("#32770".encode_utf16());
+                if dialog && pid == GetCurrentProcessId() && IsWindowVisible(hwnd) != 0 {
+                    (*(found as *mut Vec<HWND>)).push(hwnd);
+                }
+            }
+            1
+        }
+        let mut found: Vec<HWND> = Vec::new();
+        // SAFETY: the callback only uses `found` for the duration of the call.
+        unsafe {
+            EnumWindows(Some(collect), &raw mut found as LPARAM);
+        }
+        found
+    }
+
+    /// Handles this thread's messages until a dialog that is not in `before` has appeared and
+    /// closed again, or none has appeared in `START_WAIT`.
+    pub fn pump_until_closed(before: &[HWND]) {
+        let start = Instant::now();
+        let mut sheet = None;
+        loop {
+            // SAFETY: the standard message loop; `msg` is zeroable and written by `PeekMessageW`
+            // before it is read.
+            unsafe {
+                let mut msg: MSG = std::mem::zeroed();
+                while PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_REMOVE) != 0 {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            match sheet {
+                None => {
+                    sheet = dialogs().into_iter().find(|hwnd| !before.contains(hwnd));
+                    if sheet.is_none() && start.elapsed() > START_WAIT {
+                        return;
+                    }
+                }
+                // SAFETY: plain call; any value may be asked about.
+                Some(hwnd) if unsafe { IsWindow(hwnd) } == 0 => return,
+                Some(_) => {}
+            }
+            // SAFETY: no handles are passed, so the null array is never read.
+            unsafe {
+                MsgWaitForMultipleObjectsEx(0, std::ptr::null(), POLL.as_millis() as u32, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+            }
+        }
     }
 }
 
