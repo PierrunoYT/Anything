@@ -27,6 +27,8 @@ const KEY_HOTKEY: &str = "quick_search_hotkey";
 const KEY_CLOSE_NOTICE_SHOWN: &str = "close_notice_shown";
 /// Upper end of the "re-index when older than" setting: one week.
 const MAX_AGE_LIMIT_MINUTES: u64 = 10_080;
+/// How long a status message stays in the status bar.
+const STATUS_DURATION: Duration = Duration::from_secs(6);
 /// The text fields the result keys (arrows, Enter, F4 …) keep working in: the search box and the
 /// read-only preview text. Any other focused text field gets those keys itself.
 const SEARCH_BOX_ID: &str = "search_box";
@@ -252,6 +254,8 @@ pub struct FindCraftApp {
     show_help: bool,
     focus_search: bool,
     status: Option<(String, Instant)>,
+    /// Wakes the window when the status text expires.
+    egui_ctx: egui::Context,
     tz_offset: i64,
 }
 
@@ -351,6 +355,7 @@ impl FindCraftApp {
             show_help: false,
             focus_search: true,
             status: None,
+            egui_ctx: cc.egui_ctx.clone(),
             tz_offset: local_offset(),
         };
         // The hotkey and tray icon exist on Windows only.
@@ -532,6 +537,8 @@ impl FindCraftApp {
 
     fn set_status(&mut self, msg: impl Into<String>) {
         self.status = Some((msg.into(), Instant::now()));
+        // An idle window paints nothing on its own, and the text would stay up for good.
+        self.egui_ctx.request_repaint_after(STATUS_DURATION);
     }
 
     fn max_age(&self) -> Duration {
@@ -1157,7 +1164,7 @@ impl FindCraftApp {
                 ui.weak(format!("{:.0} ms", self.search_time.as_secs_f64() * 1000.0));
             }
             if let Some((msg, at)) = &self.status
-                && at.elapsed() < Duration::from_secs(6)
+                && at.elapsed() < STATUS_DURATION
             {
                 ui.separator();
                 ui.label(RichText::new(msg).color(ui.visuals().warn_fg_color));

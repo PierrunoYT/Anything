@@ -95,6 +95,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Status-bar messages such as "Copied full path" stayed up until the next mouse move or key press
+  instead of going away after six seconds. The window now wakes up to clear them.
 - Choosing Save or Don't save when asked about unsaved changes after clicking another result could
   select a different file, if the index had updated while the question was open. The file clicked
   is now found again in the latest results, and nothing is selected if it is gone.
