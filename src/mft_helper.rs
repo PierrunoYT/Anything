@@ -31,6 +31,10 @@ const MAX_ERROR_BYTES: u32 = 64 * 1024;
 /// Same bound as a cache file.
 const MAX_INDEX_BYTES: u64 = 4 << 30;
 const PROGRESS_EVERY: Duration = Duration::from_millis(150);
+/// How long the window waits for its helper to connect, and how long the helper keeps trying
+/// while another program holds the pipe. The same bound on both sides: a shorter one on the
+/// helper's let a program that reconnects in a loop outlast it while the window still waited.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(60);
 
 type ReadVolume<'a> = dyn Fn(char, &AtomicUsize, &AtomicUsize, &AtomicBool) -> anyhow::Result<VolumeIndex> + Sync + 'a;
 
@@ -275,7 +279,7 @@ impl MftHelper {
 
         let pipe = win::create_server(&name)?;
         let process = win::start_elevated(&format!("{HELPER_ARG} {name}"))?;
-        win::wait_connected(&pipe, win::process_id(&process)?, || win::has_exited(&process), Duration::from_secs(60))?;
+        win::wait_connected(&pipe, win::process_id(&process)?, || win::has_exited(&process), CONNECT_TIMEOUT)?;
         Ok(MftHelper::new(std::fs::File::from(pipe)))
     }
 
@@ -319,7 +323,7 @@ fn open_client(name: &str) -> io::Result<std::fs::File> {
     loop {
         match options.open(name) {
             #[cfg(windows)]
-            Err(e) if e.raw_os_error() == Some(windows_sys::Win32::Foundation::ERROR_PIPE_BUSY as i32) && start.elapsed() < Duration::from_secs(10) => {
+            Err(e) if e.raw_os_error() == Some(windows_sys::Win32::Foundation::ERROR_PIPE_BUSY as i32) && start.elapsed() < CONNECT_TIMEOUT => {
                 std::thread::sleep(Duration::from_millis(50));
             }
             result => return result,

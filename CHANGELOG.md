@@ -425,6 +425,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Security
 
+- Another program of the same user can no longer keep the NTFS helper from connecting by
+  reconnecting to its pipe in a loop: the helper gave up on a busy pipe after 10 seconds while
+  the window waited 60. It now keeps trying for as long as the window waits.
 - External editor launches no longer go through `cmd /C`, so shell syntax in a file name (such as
   `a&calc&.txt` or `%VAR%`) can no longer run commands. The editor is resolved on `PATH` and
   started directly; `.cmd` shims such as VS Code's `code` still work. Quoted editor paths with
