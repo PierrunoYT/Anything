@@ -528,8 +528,9 @@ const CANCEL_CHECK: usize = 1 << 15;
 /// Below this many entries to test, a query runs on the calling thread alone.
 const PARALLEL_MIN: usize = 50_000;
 
-/// Keeps the entries of `order`, all from `v`, that match. Returns `None` when cancelled.
-fn filter_part(v: &VolumeIndex, order: &[u32], q: &Query, cancelled: &(dyn Fn() -> bool + Sync)) -> Option<Vec<u32>> {
+/// Keeps the entries of `order`, all from volume `vol`, that match. Returns `None` when cancelled.
+fn filter_part(index: &Index, vol: usize, order: &[u32], q: &Query, cancelled: &(dyn Fn() -> bool + Sync)) -> Option<Vec<Hit>> {
+    let v = &index.volumes[vol];
     // A scratch's folder chain belongs to one volume, so each part starts a fresh one.
     let mut scratch = Scratch::default();
     let mut out = Vec::new();
@@ -538,20 +539,23 @@ fn filter_part(v: &VolumeIndex, order: &[u32], q: &Query, cancelled: &(dyn Fn() 
             return None;
         }
         if q.matches(v, idx, &mut scratch) {
-            out.push(idx);
+            out.push(Hit { vol: vol as u8, idx });
         }
     }
     Some(out)
 }
 
-/// Filters every volume, keeping each one's matches in `key` order. Returns `None` when
+/// Filters every volume into one run of hits per volume, in `key` order. Returns `None` when
 /// cancelled. The volumes are cut into parts that one set of at most [`thread_count`] threads
 /// works through, so a query starts no more threads than the machine runs at once, however
 /// many drives are indexed.
-fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() -> bool + Sync)) -> Option<Vec<Vec<u32>>> {
+fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() -> bool + Sync)) -> Option<Vec<Vec<Hit>>> {
     let volumes = &index.volumes;
+    fn hits(vol: usize, order: impl Iterator<Item = u32>) -> Vec<Hit> {
+        order.map(|idx| Hit { vol: vol as u8, idx }).collect()
+    }
     if q.is_empty() {
-        return Some(volumes.iter().map(|v| v.order(key).to_vec()).collect());
+        return Some(volumes.iter().enumerate().map(|(vol, v)| hits(vol, v.order(key).iter().copied())).collect());
     }
     // Paths are cheap to build in path order, where each one extends or shortens the last
     // (see `DirChain`). So a path query is filtered in path order, and its hits are then taken
@@ -568,12 +572,12 @@ fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() 
         .collect();
     let workers = threads.min(parts.len());
 
-    let found: Vec<Option<Vec<u32>>> = if workers <= 1 {
-        parts.iter().map(|&(vol, part)| filter_part(&volumes[vol], part, q, cancelled)).collect()
+    let found: Vec<Option<Vec<Hit>>> = if workers <= 1 {
+        parts.iter().map(|&(vol, part)| filter_part(index, vol, part, q, cancelled)).collect()
     } else {
         // Each worker takes the next part until none are left.
         let next = AtomicUsize::new(0);
-        let done: Vec<Vec<(usize, Option<Vec<u32>>)>> = std::thread::scope(|s| {
+        let done: Vec<Vec<(usize, Option<Vec<Hit>>)>> = std::thread::scope(|s| {
             let handles: Vec<_> = (0..workers)
                 .map(|_| {
                     s.spawn(|| {
@@ -581,7 +585,7 @@ fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() 
                         loop {
                             let i = next.fetch_add(1, AtomicOrdering::Relaxed);
                             let Some(&(vol, part)) = parts.get(i) else { break };
-                            mine.push((i, filter_part(&volumes[vol], part, q, cancelled)));
+                            mine.push((i, filter_part(index, vol, part, q, cancelled)));
                         }
                         mine
                     })
@@ -599,45 +603,54 @@ fn filter_volumes(index: &Index, q: &Query, key: SortKey, cancelled: &(dyn Fn() 
     };
 
     // A missing part was cancelled.
-    let found: Vec<Vec<u32>> = found.into_iter().collect::<Option<_>>()?;
+    let found: Vec<Vec<Hit>> = found.into_iter().collect::<Option<_>>()?;
     let mut sizes = vec![0; volumes.len()];
     for (&(vol, _), part) in parts.iter().zip(&found) {
         sizes[vol] += part.len();
     }
-    let mut lists: Vec<Vec<u32>> = sizes.into_iter().map(Vec::with_capacity).collect();
-    for (&(vol, _), part) in parts.iter().zip(found) {
-        lists[vol].extend(part);
+    // A volume's parts follow one another. Its first part becomes its run, and only the hits of
+    // any further parts are copied.
+    let mut found = parts.iter().map(|&(vol, _)| vol).zip(found).peekable();
+    let mut runs: Vec<Vec<Hit>> = Vec::with_capacity(volumes.len());
+    for (vol, size) in sizes.into_iter().enumerate() {
+        let mut run = found.next_if(|&(v, _)| v == vol).map(|(_, part)| part).unwrap_or_default();
+        run.reserve_exact(size - run.len());
+        while let Some((_, part)) = found.next_if(|&(v, _)| v == vol) {
+            run.extend(part);
+        }
+        runs.push(run);
     }
     if by_path && key != SortKey::Path {
-        for (list, v) in lists.iter_mut().zip(volumes) {
+        for (vol, (run, v)) in runs.iter_mut().zip(volumes).enumerate() {
             let mut keep = vec![false; v.slots()];
-            for &idx in list.iter() {
-                keep[idx as usize] = true;
+            for hit in run.iter() {
+                keep[hit.idx as usize] = true;
             }
-            *list = v.order(key).iter().copied().filter(|&idx| keep[idx as usize]).collect();
+            *run = hits(vol, v.order(key).iter().copied().filter(|&idx| keep[idx as usize]));
         }
     }
-    Some(lists)
+    Some(runs)
 }
 
 /// Runs a query over every volume and merges the per-volume sorted results.
 pub fn search(index: &Index, q: &Query, sort: Sort, cancelled: &(dyn Fn() -> bool + Sync)) -> Option<Vec<Hit>> {
-    let lists = filter_volumes(index, q, sort.key, cancelled)?;
-    let mut hits = merge(index, &lists, sort.key);
+    let runs = filter_volumes(index, q, sort.key, cancelled)?;
+    let mut hits = merge(index, runs, sort.key);
     if sort.descending {
         hits.reverse();
     }
     Some(hits)
 }
 
-fn merge(index: &Index, lists: &[Vec<u32>], key: SortKey) -> Vec<Hit> {
-    if key == SortKey::Path || lists.len() == 1 {
-        let mut out = Vec::with_capacity(lists.iter().map(Vec::len).sum());
+/// Merges the volumes' runs, each in `key` order, into one list in that order.
+fn merge(index: &Index, mut runs: Vec<Vec<Hit>>, key: SortKey) -> Vec<Hit> {
+    runs.retain(|run| !run.is_empty());
+    if runs.len() <= 1 {
+        return runs.pop().unwrap_or_default();
+    }
+    if key == SortKey::Path {
         // Volumes are already in drive-letter order, which is path order.
-        for (vol, list) in lists.iter().enumerate() {
-            out.extend(list.iter().map(|&idx| Hit { vol: vol as u8, idx }));
-        }
-        return out;
+        return runs.concat();
     }
 
     let cmp = |a: Hit, b: Hit| -> Ordering {
@@ -650,34 +663,30 @@ fn merge(index: &Index, lists: &[Vec<u32>], key: SortKey) -> Vec<Hit> {
         };
         ord.then(a.vol.cmp(&b.vol))
     };
+    let total: usize = runs.iter().map(Vec::len).sum();
+    let threads = if total < PARALLEL_MIN { 1 } else { thread_count() };
+    merge_runs(runs, threads, &cmp)
+}
 
-    // Merge pairs of runs in parallel rounds: each element is compared about log2(volumes) times.
-    let mut runs: Vec<Vec<Hit>> = lists
-        .iter()
-        .enumerate()
-        .map(|(vol, list)| list.iter().map(|&idx| Hit { vol: vol as u8, idx }).collect())
-        .collect();
-    while runs.len() > 1 {
-        let mut pairs = Vec::with_capacity(runs.len().div_ceil(2));
-        let mut iter = runs.into_iter();
-        while let Some(a) = iter.next() {
-            pairs.push((a, iter.next()));
-        }
-        runs = std::thread::scope(|s| {
-            let handles: Vec<_> = pairs
-                .into_iter()
-                .map(|(a, b)| {
-                    let cmp = &cmp;
-                    s.spawn(move || match b {
-                        Some(b) => merge_two(a, b, cmp),
-                        None => a,
-                    })
-                })
-                .collect();
-            handles.into_iter().map(|h| h.join().expect("merge thread")).collect()
-        });
+/// Merges sorted runs by merging each half and then the two results, so every hit is compared
+/// about log2(runs) times. While `threads` allows, the first half is merged on a thread of its
+/// own, started once for that whole half: at most `threads` threads run, the caller's included.
+fn merge_runs(mut runs: Vec<Vec<Hit>>, threads: usize, cmp: &(impl Fn(Hit, Hit) -> Ordering + Sync)) -> Vec<Hit> {
+    if runs.len() <= 1 {
+        return runs.pop().unwrap_or_default();
     }
-    runs.pop().unwrap_or_default()
+    let second = runs.split_off(runs.len() / 2);
+    let (a, b) = if threads > 1 {
+        std::thread::scope(|s| {
+            let first = s.spawn(|| merge_runs(runs, threads / 2, cmp));
+            let second = merge_runs(second, threads - threads / 2, cmp);
+            // A panic is a bug: pass it on (see `Searcher::start`).
+            (first.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)), second)
+        })
+    } else {
+        (merge_runs(runs, 1, cmp), merge_runs(second, 1, cmp))
+    };
+    merge_two(a, b, cmp)
 }
 
 fn merge_two(a: Vec<Hit>, b: Vec<Hit>, cmp: &impl Fn(Hit, Hit) -> Ordering) -> Vec<Hit> {
@@ -1013,7 +1022,8 @@ mod tests {
 
     /// Large queries over several drives are cut into parts shared by one set of threads. The
     /// parts must come back together in each drive's order, path queries included, and a
-    /// cancelled query must give no result.
+    /// cancelled query must give no result. Merged (on threads too), the hits keep each drive's
+    /// order and are in key order across drives.
     #[test]
     fn parallel_filtering_keeps_each_volumes_order() {
         let mut index = Index::default();
@@ -1030,17 +1040,36 @@ mod tests {
         for text in ["1", "!7 ext:rs", "\\d12", "path:3\\f"].map(native) {
             let q = Query::parse(&text, SearchOptions::default()).unwrap();
             for key in [SortKey::Name, SortKey::Path, SortKey::Size, SortKey::Modified] {
-                let expected: Vec<Vec<u32>> = index
+                let expected: Vec<Vec<Hit>> = index
                     .volumes
                     .iter()
-                    .map(|v| {
+                    .enumerate()
+                    .map(|(vol, v)| {
                         let mut scratch = Scratch::default();
-                        v.order(key).iter().copied().filter(|&idx| q.matches(v, idx, &mut scratch)).collect()
+                        let matches = v.order(key).iter().copied().filter(|&idx| q.matches(v, idx, &mut scratch));
+                        matches.map(|idx| Hit { vol: vol as u8, idx }).collect()
                     })
                     .collect();
                 assert!(expected.iter().all(|l| !l.is_empty()), "`{text}` matches on every drive");
                 assert_eq!(filter_volumes(&index, &q, key, &|| false).unwrap(), expected, "`{text}` by {key:?}");
                 assert!(filter_volumes(&index, &q, key, &|| true).is_none(), "`{text}` cancelled");
+
+                let hits = search(&index, &q, Sort { key, descending: false }, &|| false).unwrap();
+                assert_eq!(hits.len(), expected.iter().map(Vec::len).sum::<usize>());
+                for (vol, run) in expected.iter().enumerate() {
+                    let mine: Vec<Hit> = hits.iter().copied().filter(|h| h.vol as usize == vol).collect();
+                    assert_eq!(&mine, run, "`{text}` by {key:?}");
+                }
+                let in_order = |a: Hit, b: Hit| {
+                    let (va, vb) = (index.volume(a.vol), index.volume(b.vol));
+                    match key {
+                        SortKey::Name => (va.lower_name(a.idx), a.vol) <= (vb.lower_name(b.idx), b.vol),
+                        SortKey::Size => (va.entry(a.idx).size, a.vol) <= (vb.entry(b.idx).size, b.vol),
+                        SortKey::Modified => (va.entry(a.idx).mtime, a.vol) <= (vb.entry(b.idx).mtime, b.vol),
+                        SortKey::Path => a.vol <= b.vol,
+                    }
+                };
+                assert!(hits.windows(2).all(|w| in_order(w[0], w[1])), "`{text}` by {key:?} merged out of order");
             }
         }
     }

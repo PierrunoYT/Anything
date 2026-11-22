@@ -167,9 +167,11 @@ then taken in the requested order. That keeps path queries linear however deep t
 
 Queries over more than 50,000 entries in all are cut into parts of each drive's sort order, and
 one set of worker threads (as many as the CPU runs at once, at most 32) works through the parts
-of every drive; smaller queries are filtered on the searcher's own thread. Per-drive results are then
-merged pairwise in parallel rounds by the sort key (path order just concatenates drives in letter
-order).
+of every drive; smaller queries are filtered on the searcher's own thread. Each part's matches are
+kept as hits, and a drive's first part becomes its result list, so only further parts are copied.
+Per-drive results are then merged by the sort key, each half of the drives merged on its own
+thread while the thread budget lasts, so the merge also runs no more threads than the CPU at
+once (path order just concatenates drives in letter order).
 
 The `Searcher` runs on a background thread. Every keystroke submits a request with a new
 generation number; running searches check it periodically and abandon stale work, and only the

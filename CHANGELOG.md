@@ -131,6 +131,11 @@ All notable changes to this project are documented here. The format follows
 - Fast NTFS indexing no longer loses records that lie in a sparse run of the master file table:
   they were read as zeros, so those files and everything under them silently went missing. Such
   a table now fails the read, and the folder scan indexes the drive instead.
+- Searching several drives copied every drive's results twice more than needed on each
+  keystroke, and merging them started new threads for every round, more than the CPU runs at
+  once with many drives. The matches now go straight into each drive's result list, and the
+  merge uses at most as many threads as the CPU runs at once, each started once, and none for
+  small results.
 - A search whose filter thread crashed was taken for a cancelled one, so no answer came and the
   search spinner kept turning. A crash while searching, merging or ranking now shows an error for
   that query, and the next query is searched as usual.
