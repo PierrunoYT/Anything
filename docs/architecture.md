@@ -111,7 +111,9 @@ Folder sizes are the sum of all files below them, propagated up the parent chain
   - **Serve.** It answers one request at a time ("index drive X") with progress messages and
     the index in the cache format. It writes no files, reads no settings, starts nothing, and
     exits when the pipe closes. A progress message that cannot be sent cancels the read in
-    progress.
+    progress. So does a `C` from the window, which it sends after the next progress message once
+    the drive's job is cancelled (superseded); the helper checks for it with `PeekNamedPipe`
+    between progress messages, answers with an error, and skips a `C` that arrives after its reply.
   - **Check.** The window parses what it receives with `VolumeIndex::from_bytes`, which applies
     every check a cache file gets. NTFS drives are therefore read one after another. A request
     that hears nothing from the helper for two minutes (progress arrives every 150 ms) is

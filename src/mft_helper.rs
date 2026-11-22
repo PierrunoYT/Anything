@@ -14,6 +14,10 @@
 //! Protocol, little-endian: the window sends `R` and a drive letter; the helper sends any number
 //! of `P` + progress (u64) + total (u64), then `D` + length (u64) + index, or `E` + length (u32)
 //! + UTF-8 message.
+//!
+//! While a request runs the window may send `C` to cancel it: the helper stops reading the
+//! volume and answers `E` (or the reply it was already sending). A `C` that arrives after the
+//! reply is ignored.
 
 // The helper runs on Windows only; elsewhere it is built and tested but never started.
 #![cfg_attr(not(windows), allow(dead_code, unused_variables))]
@@ -46,29 +50,70 @@ fn read_u64(r: &mut impl Read) -> io::Result<u64> {
     Ok(u64::from_le_bytes(b))
 }
 
-/// The next requested drive letter, or `None` once the window has closed the pipe.
+/// The next requested drive letter, or `None` once the window has closed the pipe. Skips the
+/// cancellations of requests that were answered before the helper saw them.
 fn read_request(r: &mut impl Read) -> io::Result<Option<char>> {
-    let mut req = [0u8; 2];
-    match r.read_exact(&mut req) {
-        Ok(()) => {}
-        Err(e) if matches!(e.kind(), io::ErrorKind::UnexpectedEof | io::ErrorKind::BrokenPipe) => return Ok(None),
-        Err(e) => return Err(e),
+    let mut kind = [0u8; 1];
+    loop {
+        match r.read_exact(&mut kind) {
+            Ok(()) if kind[0] == b'C' => continue,
+            Ok(()) => break,
+            Err(e) if matches!(e.kind(), io::ErrorKind::UnexpectedEof | io::ErrorKind::BrokenPipe) => return Ok(None),
+            Err(e) => return Err(e),
+        }
     }
-    match req {
+    let mut letter = [0u8; 1];
+    r.read_exact(&mut letter)?;
+    match [kind[0], letter[0]] {
         [b'R', letter @ b'A'..=b'Z'] => Ok(Some(letter as char)),
         _ => Err(io::Error::new(io::ErrorKind::InvalidData, "bad request")),
     }
 }
 
+/// A connection that can tell whether bytes are waiting to be read, without blocking.
+trait Pending {
+    fn pending(&self) -> io::Result<bool>;
+}
+
+impl Pending for std::fs::File {
+    #[cfg(windows)]
+    fn pending(&self) -> io::Result<bool> {
+        use std::os::windows::io::AsRawHandle;
+        let mut available = 0u32;
+        // SAFETY: a live pipe handle owned by `self`; no buffer is read (null, size 0) and
+        // `available` is a writable u32.
+        let ok = unsafe {
+            windows_sys::Win32::System::Pipes::PeekNamedPipe(
+                self.as_raw_handle(),
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                &mut available,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(available > 0)
+    }
+
+    #[cfg(not(windows))]
+    fn pending(&self) -> io::Result<bool> {
+        Ok(false)
+    }
+}
+
 /// The helper's side: answers requests until the window closes the pipe.
-fn serve(conn: &mut (impl Read + Write), read_volume: &ReadVolume) -> io::Result<()> {
+fn serve(conn: &mut (impl Read + Write + Pending), read_volume: &ReadVolume) -> io::Result<()> {
     while let Some(letter) = read_request(conn)? {
         let (progress, total, cancel) = (AtomicUsize::new(0), AtomicUsize::new(0), AtomicBool::new(false));
         let result = std::thread::scope(|s| -> io::Result<_> {
             let job = s.spawn(|| read_volume(letter, &progress, &total, &cancel));
             while !job.is_finished() {
-                if let Err(e) = send_progress(conn, &progress, &total) {
-                    // The window is gone: stop reading the volume rather than finish for nobody.
+                if let Err(e) = check_cancel(conn, &cancel).and_then(|()| send_progress(conn, &progress, &total)) {
+                    // The window is gone (or out of step): stop reading the volume rather than
+                    // finish for nobody.
                     cancel.store(true, Ordering::Relaxed);
                     return Err(e);
                 }
@@ -88,6 +133,19 @@ fn serve(conn: &mut (impl Read + Write), read_volume: &ReadVolume) -> io::Result
             Err(_) => send_error(conn, "the NTFS reader panicked")?,
         }
         conn.flush()?;
+    }
+    Ok(())
+}
+
+/// Sets `cancel` when the window has sent `C` during a request. Nothing else may arrive then.
+fn check_cancel(conn: &mut (impl Read + Pending), cancel: &AtomicBool) -> io::Result<()> {
+    if conn.pending()? {
+        let mut kind = [0u8; 1];
+        conn.read_exact(&mut kind)?;
+        if kind[0] != b'C' {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "bad request"));
+        }
+        cancel.store(true, Ordering::Relaxed);
     }
     Ok(())
 }
@@ -114,10 +172,19 @@ enum Reply {
     Failed(String),
 }
 
-/// The window's side of one request. Any error means the pipe is out of step (or broken).
-fn request(conn: &mut (impl Read + Write), letter: char, progress: &AtomicUsize, total: &AtomicUsize) -> anyhow::Result<Reply> {
+/// The window's side of one request. Any error means the pipe is out of step (or broken). Once
+/// `cancel` is set, asks the helper (at its next progress message) to stop reading the drive, so
+/// the pipe is free for the next request without waiting for a read nobody wants.
+fn request(
+    conn: &mut (impl Read + Write),
+    letter: char,
+    progress: &AtomicUsize,
+    total: &AtomicUsize,
+    cancel: &AtomicBool,
+) -> anyhow::Result<Reply> {
     conn.write_all(&[b'R', letter as u8])?;
     conn.flush()?;
+    let mut cancel_sent = false;
     loop {
         let mut kind = [0u8; 1];
         conn.read_exact(&mut kind)?;
@@ -125,6 +192,11 @@ fn request(conn: &mut (impl Read + Write), letter: char, progress: &AtomicUsize,
             b'P' => {
                 progress.store(read_u64(conn)? as usize, Ordering::Relaxed);
                 total.store(read_u64(conn)? as usize, Ordering::Relaxed);
+                if !cancel_sent && cancel.load(Ordering::Relaxed) {
+                    conn.write_all(b"C")?;
+                    conn.flush()?;
+                    cancel_sent = true;
+                }
             }
             b'D' => {
                 let len = read_u64(conn)?;
@@ -235,7 +307,8 @@ impl MftHelper {
     }
 
     /// Reads drive `letter`'s master file table in the helper. Requests wait for each other;
-    /// one whose job was `cancel`led while it waited is not sent. A helper that stays silent
+    /// one whose job was `cancel`led while it waited is not sent, and one cancelled while the
+    /// helper reads stops that read within a progress interval or so. A helper that stays silent
     /// for [`IDLE_TIMEOUT`] is given up on.
     pub fn read_volume(&self, letter: char, progress: &AtomicUsize, total: &AtomicUsize, cancel: &AtomicBool) -> anyhow::Result<VolumeIndex> {
         anyhow::ensure!(letter.is_ascii_uppercase(), "bad drive letter");
@@ -248,7 +321,7 @@ impl MftHelper {
             let (done, done_rx) = std::sync::mpsc::channel::<()>();
             let (heard, timed_out, idle) = (&heard, &timed_out, self.idle_timeout);
             s.spawn(move || watchdog(done_rx, idle, start, heard, timed_out, interrupt));
-            let reply = request(&mut Watched { pipe, start, heard, timed_out }, letter, progress, total);
+            let reply = request(&mut Watched { pipe, start, heard, timed_out }, letter, progress, total, cancel);
             drop(done);
             reply
         });
@@ -600,6 +673,12 @@ mod tests {
         }
     }
 
+    impl Pending for GoneWindow {
+        fn pending(&self) -> io::Result<bool> {
+            Ok(false)
+        }
+    }
+
     impl Write for GoneWindow {
         fn write(&mut self, _: &[u8]) -> io::Result<usize> {
             Err(io::ErrorKind::BrokenPipe.into())
@@ -625,6 +704,57 @@ mod tests {
         let err = serve(&mut GoneWindow(io::Cursor::new(b"RC".to_vec())), &read).expect_err("the window is gone");
         assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
         assert!(start.elapsed() < Duration::from_secs(5), "the reader ran on for {:?}", start.elapsed());
+    }
+
+    /// A request cancelled while the helper reads stops that read, and the pipe is free for the
+    /// next request right away. Only waiting requests could be cancelled: a running one held the
+    /// pipe until the whole drive was read, and every other drive waited behind it.
+    #[test]
+    fn running_requests_can_be_cancelled() {
+        let name = pipe_name("g8");
+        let server = win::create_server(&name).unwrap();
+        let calls = AtomicUsize::new(0);
+        let read = move |_: char, _: &AtomicUsize, total: &AtomicUsize, cancel: &AtomicBool| {
+            if calls.fetch_add(1, Ordering::Relaxed) > 0 {
+                return Ok(sample());
+            }
+            total.store(1, Ordering::Relaxed);
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !cancel.load(Ordering::Relaxed) {
+                anyhow::ensure!(Instant::now() < deadline, "never cancelled");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            anyhow::bail!("cancelled")
+        };
+        let helper = std::thread::spawn(move || serve(&mut open_client(&name).unwrap(), &read));
+        win::wait_connected(&server, std::process::id(), || false, Duration::from_secs(10)).unwrap();
+        let window = MftHelper::new(std::fs::File::from(server));
+
+        let (total, cancel) = (AtomicUsize::new(0), AtomicBool::new(false));
+        let start = Instant::now();
+        let err = std::thread::scope(|s| {
+            s.spawn(|| {
+                while total.load(Ordering::Relaxed) == 0 {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                cancel.store(true, Ordering::Relaxed);
+            });
+            window.read_volume('C', &AtomicUsize::new(0), &total, &cancel).err()
+        });
+        assert!(start.elapsed() < Duration::from_secs(5), "the cancelled read ran on for {:?}", start.elapsed());
+        assert_eq!(err.map(|e| e.to_string()).as_deref(), Some("cancelled"));
+        assert!(window.is_alive(), "a cancelled request keeps the helper");
+        assert_eq!(window.read_volume('C', &AtomicUsize::new(0), &AtomicUsize::new(0), &GO).unwrap().len(), sample().len());
+
+        drop(window);
+        helper.join().unwrap().unwrap();
+    }
+
+    /// A cancellation that reaches the helper after it answered is skipped, not a bad request.
+    #[test]
+    fn late_cancellations_are_ignored() {
+        assert_eq!(read_request(&mut io::Cursor::new(b"CCRD".to_vec())).unwrap(), Some('D'));
+        assert_eq!(read_request(&mut io::Cursor::new(b"C".to_vec())).unwrap(), None);
     }
 
     /// A helper that takes a request and then says nothing is given up on after the idle

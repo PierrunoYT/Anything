@@ -240,8 +240,8 @@ impl Job {
                 mft::read_volume(letter, &self.progress, &self.total, &self.cancel)
             }))
             .unwrap_or_else(|_| Err(anyhow::anyhow!("the NTFS reader panicked"))),
-            // The helper cannot be interrupted once it reads; a job cancelled while it waited
-            // for the pipe is not sent, and one cancelled later just drops its result.
+            // A job cancelled while it waited for the pipe is not sent, and one cancelled while
+            // the helper reads stops that read; an index that arrived anyway is dropped.
             (true, Some(h)) => h.read_volume(letter, &self.progress, &self.total, &self.cancel).and_then(|v| {
                 anyhow::ensure!(!self.cancel.load(Ordering::Relaxed), "cancelled");
                 Ok(v)

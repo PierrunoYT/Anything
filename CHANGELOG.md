@@ -113,6 +113,9 @@ All notable changes to this project are documented here. The format follows
 - Pressing Enter on a focused button in Settings or Help (such as "Delete cached indexes") opened
   the selected search result instead, and the arrows and other result shortcuts moved or acted on
   the results behind the dialog. Result shortcuts now wait until Settings and Help are closed.
+- Cancelling a drive that the NTFS helper is reading (for example by re-indexing it) now stops
+  that read. Only drives still waiting for the helper could be cancelled; a running read went on
+  to the end of the drive while every other drive waited behind it.
 - On Linux and macOS the folder scan no longer runs until memory runs out on a bind mount that
   shows a folder inside itself (such as `mount --bind / /mnt/root`). Each folder is entered once;
   a second path to it is listed but not entered and counted as not followed.
