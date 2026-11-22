@@ -163,11 +163,11 @@ pub enum Event {
 }
 
 #[cfg(windows)]
-pub use platform::{Background, activate_running_instance, focus_bar, hide_bar, show_bar};
+pub use platform::{Background, activate_running_instance, finish_shutdown, focus_bar, hide_bar, show_bar};
 
 /// Other platforms have no quick search: `start` fails, so the window just closes as usual.
 #[cfg(not(windows))]
-pub use stub::{Background, activate_running_instance, focus_bar, hide_bar, show_bar};
+pub use stub::{Background, activate_running_instance, finish_shutdown, focus_bar, hide_bar, show_bar};
 
 #[cfg(not(windows))]
 mod stub {
@@ -191,6 +191,8 @@ mod stub {
         false
     }
 
+    pub fn finish_shutdown() {}
+
     pub fn hide_bar() {}
 
     pub fn show_bar() {}
@@ -210,7 +212,7 @@ mod platform {
     use std::hash::{BuildHasher, RandomState};
     use std::io;
     use std::rc::Rc;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{Arc, Condvar, Mutex};
     use std::time::Duration;
     use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, RECT, WPARAM};
     use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTOPRIMARY, MONITORINFO, MonitorFromWindow};
@@ -245,8 +247,9 @@ mod platform {
     /// `taskkill` sends that to every top-level window, and it means "exit the program". The class
     /// name is no secret either, so `wparam` has to carry the thread's random `shutdown_cookie`.
     const WM_SHUTDOWN: u32 = WM_APP + 4;
-    /// How long dropping `Background` waits for the thread to remove the tray icon. The main thread
-    /// handles no messages meanwhile, and a thread blocked on one of its windows would never finish.
+    /// How long the next hotkey thread waits for the previous one to free the hotkey, and the end
+    /// of `main` for the last one to remove the tray icon. A thread blocked on one of its windows
+    /// would never finish.
     const SHUTDOWN_WAIT: Duration = Duration::from_secs(1);
     const MENU_OPEN: usize = 1;
     const MENU_SEARCH: usize = 2;
@@ -264,7 +267,47 @@ mod platform {
         signals: Arc<BarSignals>,
         registered: Cell<bool>,
         shutdown_cookie: usize,
+        ending: Arc<Ending>,
     }
+
+    /// How far a hotkey thread has got with ending. Dropping `Background` only asks the thread to
+    /// end, since the UI would freeze while it waited; the next thread waits instead, before it
+    /// registers the hotkey, and the end of `main` before the process takes the tray icon with it.
+    #[derive(Default)]
+    struct Ending {
+        stage: Mutex<Stage>,
+        changed: Condvar,
+    }
+
+    #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+    enum Stage {
+        #[default]
+        Running,
+        /// The window is being or has been destroyed, and its hotkey is free again.
+        HotkeyReleased,
+        /// The thread is done; the tray icon is gone.
+        Ended,
+    }
+
+    impl Ending {
+        fn reach(&self, stage: Stage) {
+            let mut current = self.stage.lock().unwrap_or_else(|e| e.into_inner());
+            *current = (*current).max(stage);
+            self.changed.notify_all();
+        }
+
+        fn reached(&self, stage: Stage) -> bool {
+            *self.stage.lock().unwrap_or_else(|e| e.into_inner()) >= stage
+        }
+
+        fn wait_for(&self, stage: Stage, timeout: Duration) {
+            let current = self.stage.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = self.changed.wait_timeout_while(current, timeout, |current| *current < stage);
+        }
+    }
+
+    /// The thread of the last `Background` dropped, until the next one has waited for it.
+    static RETIRED: Mutex<Option<Arc<Ending>>> = Mutex::new(None);
 
     thread_local! {
         static STATE: RefCell<Option<Rc<State>>> = const { RefCell::new(None) };
@@ -516,13 +559,16 @@ mod platform {
             WM_SHOW_MAIN => with_state(|state| state.send(Event::ShowMain)),
             WM_DESTROY => {
                 // The hotkey goes first and explicitly: removing the icon waits for Explorer, and
-                // a new instance or a restarted thread has to be able to register the hotkey even
-                // if this one is still stuck there when `Background::drop` stops waiting.
-                // SAFETY: `hwnd` is the window being destroyed, which still exists here, and the
-                // data identifies the icon it added. Unregistering a hotkey that is not
-                // registered only fails.
+                // the next thread has to be able to register the hotkey even if this one is still
+                // stuck there when it stops waiting.
+                // SAFETY: `hwnd` is the window being destroyed, which still exists here.
+                // Unregistering a hotkey that is not registered only fails.
                 unsafe {
                     UnregisterHotKey(hwnd, HOTKEY_ID);
+                }
+                with_state(|state| state.ending.reach(Stage::HotkeyReleased));
+                // SAFETY: the window still exists here, and the data identifies the icon it added.
+                unsafe {
                     Shell_NotifyIconW(NIM_DELETE, &tray_data(hwnd));
                     PostQuitMessage(0);
                 }
@@ -587,7 +633,7 @@ mod platform {
         shutdown_cookie: usize,
         /// Disconnects if the thread ever ends without being asked to.
         pub events: Receiver<Event>,
-        stopped: std::sync::mpsc::Receiver<()>,
+        ending: Arc<Ending>,
     }
 
     impl Background {
@@ -599,11 +645,17 @@ mod platform {
             // it gives a number other processes cannot guess.
             let shutdown_cookie = RandomState::new().hash_one(()) as usize;
             let (started_tx, started) = std::sync::mpsc::channel();
-            let (stopped_tx, stopped) = std::sync::mpsc::channel();
+            let ending = Arc::new(Ending::default());
+            let ending_thread = Arc::clone(&ending);
+            // The previous thread may still hold the hotkey; this one waits for it to let go.
+            let previous = RETIRED.lock().unwrap_or_else(|e| e.into_inner()).take();
             std::thread::Builder::new().name("hotkey and tray".into()).spawn(move || {
                 let hwnd = match create_window() {
                     Ok(hwnd) => hwnd,
                     Err(e) => {
+                        // Still to be waited for, by the next start or the end of `main`. The UI
+                        // thread waits for `started` meanwhile, so nothing else can be retired.
+                        *RETIRED.lock().unwrap_or_else(|e| e.into_inner()) = previous;
                         let _ = started_tx.send(Err(e));
                         return;
                     }
@@ -613,19 +665,25 @@ mod platform {
                 // The app only notices that the thread has ended when it next runs its logic, which
                 // a hidden window does not do unless asked to.
                 let wake = ctx.clone();
-                let state = State {
+                let state = Rc::new(State {
                     ctx,
                     events: events_tx,
                     next_hotkey: next_hotkey_thread,
                     signals,
                     registered: Cell::new(false),
                     shutdown_cookie,
-                };
-                state.register(hwnd, hotkey);
-                STATE.set(Some(Rc::new(state)));
-                // Before the icon: adding it waits for Explorer, which can take seconds while the
-                // taskbar restarts, and the caller is the UI thread. Nothing here needs the icon.
+                    ending: Arc::clone(&ending_thread),
+                });
+                STATE.set(Some(Rc::clone(&state)));
+                // Before waiting for the previous thread, registering the hotkey and adding the
+                // icon: the caller is the UI thread, and adding the icon waits for Explorer, which
+                // can take seconds while the taskbar restarts. The hotkey's outcome is an event.
                 let _ = started_tx.send(Ok(hwnd as isize));
+                if let Some(previous) = previous {
+                    previous.wait_for(Stage::HotkeyReleased, SHUTDOWN_WAIT);
+                }
+                state.register(hwnd, hotkey);
+                drop(state);
                 add_tray_icon(hwnd);
 
                 // SAFETY: the standard message loop; `msg` is zeroable and written by `GetMessageW`
@@ -640,12 +698,12 @@ mod platform {
                 }
                 // Before the state goes, which disconnects `events`: an app that sees that drops
                 // `Background`, which must then know that the window has gone.
-                let _ = stopped_tx.send(());
+                ending_thread.reach(Stage::Ended);
                 STATE.set(None);
                 wake.request_repaint();
             })?;
             let hwnd = started.recv().map_err(|_| io::Error::other("the hotkey thread stopped"))??;
-            Ok(Background { hwnd, next_hotkey, shutdown_cookie, events, stopped })
+            Ok(Background { hwnd, next_hotkey, shutdown_cookie, events, ending })
         }
 
         /// Replaces the hotkey. The outcome arrives as `Event::HotkeyRegistered`.
@@ -660,16 +718,25 @@ mod platform {
 
     impl Drop for Background {
         fn drop(&mut self) {
-            // A thread that has ended has destroyed its window, and the handle may since have been
-            // given to another program's window: only a thread still running is asked to stop.
-            if self.stopped.try_recv() != Err(std::sync::mpsc::TryRecvError::Empty) {
-                return;
+            // A window that has been destroyed may since have given its handle to another
+            // program's window: only a thread whose window still exists is asked to stop.
+            if !self.ending.reached(Stage::HotkeyReleased) {
+                // SAFETY: posting to a window that no longer exists fails harmlessly.
+                unsafe {
+                    PostMessageW(self.hwnd as HWND, WM_SHUTDOWN, self.shutdown_cookie, 0);
+                }
             }
-            // SAFETY: posting to a window that no longer exists fails harmlessly.
-            unsafe {
-                PostMessageW(self.hwnd as HWND, WM_SHUTDOWN, self.shutdown_cookie, 0);
-            }
-            let _ = self.stopped.recv_timeout(SHUTDOWN_WAIT);
+            *RETIRED.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::clone(&self.ending));
+        }
+    }
+
+    /// Gives the thread of the last `Background` dropped a moment to remove its tray icon, which
+    /// Windows otherwise only notices is dead when the pointer crosses it. For the end of `main`,
+    /// when no window is left to freeze.
+    pub fn finish_shutdown() {
+        let retired = RETIRED.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some(retired) = retired {
+            retired.wait_for(Stage::Ended, SHUTDOWN_WAIT);
         }
     }
 

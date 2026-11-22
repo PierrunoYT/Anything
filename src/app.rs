@@ -1967,7 +1967,7 @@ impl eframe::App for FindCraftApp {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        // Takes the tray icon away now; Windows only notices a dead one when the pointer crosses it.
+        // Asks the background thread to remove the tray icon; main waits briefly for it to finish.
         self.background = None;
     }
 }

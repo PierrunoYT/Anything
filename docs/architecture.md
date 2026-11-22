@@ -211,14 +211,20 @@ the background thread) lives in `logic`, and these two parts work without the wi
   `ShowWindowAsync` all the same, because the bar holds its state's lock while its UI runs.
 
 Calls the hotkey thread makes on the bar are asynchronous (`ShowWindowAsync`, `SWP_ASYNCWINDOWPOS`),
-because the main thread owns that window and a synchronous call would wait for it. For the same
-reason, dropping `Background` waits for the thread only briefly: the main thread handles no messages
-meanwhile. Since the window's visibility lags behind these calls, the hotkey toggles whether the bar
-is meant to be open, kept in `BarSignals`, instead of reading it. `WM_CLOSE` to the hidden window
-comes from outside (`taskkill` sends it to every top-level window), so it means "exit" and goes
-through the usual unsaved-edits question; the app stops the thread with a private message instead.
-That message carries a random per-thread cookie in `wparam` and is ignored without it: the window
-class is fixed, so any program could find the window and post the message.
+because the main thread owns that window and a synchronous call would wait for it. Since the
+window's visibility lags behind these calls, the hotkey toggles whether the bar is meant to be
+open, kept in `BarSignals`, instead of reading it. `WM_CLOSE` to the hidden window comes from
+outside (`taskkill` sends it to every top-level window), so it means "exit" and goes through the
+usual unsaved-edits question; the app stops the thread with a private message instead. That message
+carries a random per-thread cookie in `wparam` and is ignored without it: the window class is
+fixed, so any program could find the window and post the message.
+
+Dropping `Background` does not wait for the thread, since the UI would freeze meanwhile: it only
+posts the stop message, and skips even that once the window is gone, as its handle may belong to
+another window by then. The next `Background`'s thread waits instead (up to a second, off the UI
+thread) until the old one has unregistered the hotkey, before registering it, so turning quick
+search off and on again does not find the hotkey taken. `main` waits the same way for the last
+thread to remove its tray icon, after the window has closed.
 
 Key presses are read before the text box takes the frame's typing but run after it (`read_keys`,
 then `run`), so a key pressed in the same frame as a character sees the new query. A click on a row

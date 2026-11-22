@@ -39,7 +39,7 @@ fn main() -> eframe::Result {
         persist_window: true,
         ..Default::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "FindCraft",
         options,
         Box::new(|cc| {
@@ -47,7 +47,10 @@ fn main() -> eframe::Result {
             set_taskbar_icon(cc);
             Ok(Box::new(app::FindCraftApp::new(cc)))
         }),
-    )
+    );
+    // The window has gone, so waiting for the tray icon to be removed freezes nothing.
+    hotkey::finish_shutdown();
+    result
 }
 
 /// The window and taskbar icon, decoded from the PNG baked into the binary.
