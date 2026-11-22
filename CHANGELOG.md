@@ -95,6 +95,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Closing FindCraft while its window was hidden in the notification area and an inline edit had
+  unsaved changes left it running with no way to answer: the question about the changes waited for
+  a window that stayed hidden. The window now comes back to ask.
 - Opening a file in the external editor (Ctrl+E) froze the window while the editor was looked up
   on `PATH`, for as long as a slow or unreachable network folder there took to answer. The editor
   is now looked up and started in the background, and a failure still shows in the status bar.

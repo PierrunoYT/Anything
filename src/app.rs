@@ -471,6 +471,8 @@ impl FindCraftApp {
         } else if self.preview.as_ref().is_some_and(|p| p.dirty) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.pending = Some(Pending::Close);
+            // Closed while hidden (a logoff, the taskbar): the question needs the window.
+            self.show_main(ctx);
         } else if self.background.is_some() && !self.quitting {
             // Only the window goes away; the hotkey and the tray icon stay.
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
