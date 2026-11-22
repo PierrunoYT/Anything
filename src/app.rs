@@ -902,6 +902,8 @@ impl FindCraftApp {
             && ctx
                 .memory(|m| m.focused())
                 .is_some_and(|id| id != egui::Id::unique(SEARCH_BOX_ID) && id != egui::Id::unique(PREVIEW_TEXT_ID));
+        // Settings and Help take Enter and the arrows for their own buttons, not for the results.
+        let dialog_open = self.show_settings || self.show_help;
         let mut nav: isize = 0;
         let mut jump: Option<bool> = None; // Some(true) = end, Some(false) = start
         let mut action = None;
@@ -915,6 +917,10 @@ impl FindCraftApp {
             find = i.consume_key(Modifiers::COMMAND, Key::F);
             save = i.consume_key(Modifiers::COMMAND, Key::S);
             if editing_text {
+                return;
+            }
+            esc = i.consume_key(Modifiers::NONE, Key::Escape);
+            if dialog_open {
                 return;
             }
             if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
@@ -948,7 +954,6 @@ impl FindCraftApp {
             } else if i.consume_key(Modifiers::NONE, Key::F4) {
                 action = Some(RowAction::EditInline);
             }
-            esc = i.consume_key(Modifiers::NONE, Key::Escape);
         });
 
         if f1 {
