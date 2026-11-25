@@ -63,7 +63,8 @@ All notable changes to this project are documented here. The format follows
 
 - The app is renamed Anything (it was FindCraft, and FileCraft before that): the exe, window
   title, cache folder (%LOCALAPPDATA%\Anything, ~/Library/Caches/Anything, ~/.cache/anything),
-  settings, the ANYTHING_EDITOR and ANYTHING_BENCH_ROOT variables and the hero image. Indexes and
+  settings, the ANYTHING_EDITOR and ANYTHING_BENCH_ROOT variables, the hero image and the GitHub
+  repository (github.com/PierrunoYT/Anything; the old URL redirects). Indexes and
   settings from FindCraft are not carried over; the first start rebuilds them.
 - Anything is licensed under the GNU General Public License v3.0 or later (it was MIT). The
   `LICENSE` file, the package's `license` field and the README's License section say so.

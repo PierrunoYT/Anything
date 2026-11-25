@@ -5,7 +5,7 @@
 <p align="center"><strong>Find any file on your computer as fast as you can type.</strong></p>
 
 <p align="center">
-  <a href="https://github.com/PierrunoYT/FindCraft/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/PierrunoYT/FindCraft/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
+  <a href="https://github.com/PierrunoYT/Anything/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/PierrunoYT/Anything/ci.yml?branch=main&label=CI&logo=github" alt="CI"></a>
   <img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-0078D4" alt="Platforms: Windows | macOS | Linux">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-4c1" alt="License: GPL-3.0"></a>
 </p>
