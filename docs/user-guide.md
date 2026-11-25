@@ -1,34 +1,34 @@
 # User guide
 
-FindCraft indexes every file and folder on your fixed drives and finds them as you type,
-like [Everything](https://www.voidtools.com/). Start `FindCraft.exe`; there are no command-line options (FindCraft starts its own NTFS
+Anything indexes every file and folder on your fixed drives and finds them as you type,
+like [Everything](https://www.voidtools.com/). Start `Anything.exe`; there are no command-line options (Anything starts its own NTFS
 helper with an internal one). When it is already running in the notification area, starting the
-same `FindCraft.exe` again shows its window; a copy elsewhere on disk starts on its own.
+same `Anything.exe` again shows its window; a copy elsewhere on disk starts on its own.
 
 ## On Linux
 
-FindCraft also runs on Linux (`./FindCraft`). There are no drive letters: the one volume is the
+Anything also runs on Linux (`./Anything`). There are no drive letters: the one volume is the
 file system root `/`, shown as `/` in the status bar and in Settings. It is always indexed with a
 folder scan, which also enters the file systems mounted below `/` but not `/proc`, `/sys`, `/dev`
 and `/run`; symbolic links are listed but not followed. The status bar's hover text counts those
 folders and folder links as not entered. A folder mounted a second time (a bind mount) is entered
 once. Paths use `/` (`etc/host` is a path term),
 and `\` and `:` are ordinary characters of names. The cache is kept in
-`$XDG_CACHE_HOME/findcraft/index`, by default `~/.cache/findcraft/index`. Open, Show in folder and
-the default external editor use `xdg-open`; set `FINDCRAFT_EDITOR` (or the setting) to use another
+`$XDG_CACHE_HOME/anything/index`, by default `~/.cache/anything/index`. Open, Show in folder and
+the default external editor use `xdg-open`; set `ANYTHING_EDITOR` (or the setting) to use another
 editor. Fast NTFS indexing, the quick search bar, the notification area icon and Properties exist
 on Windows only and are not shown.
 
 ## On macOS
 
-FindCraft runs on macOS too, much as on Linux: the one volume is `/`, indexed with a folder scan,
+Anything runs on macOS too, much as on Linux: the one volume is `/`, indexed with a folder scan,
 and paths use `/`. The scan does not enter `/System/Volumes` (the data volume there already
 appears at `/`, as `/Users`, `/Applications` and so on, so it would list every file twice) or
-`/dev`. The cache is kept in `~/Library/Caches/FindCraft/index`. **Open** uses the default
+`/dev`. The cache is kept in `~/Library/Caches/Anything/index`. **Open** uses the default
 application, **Show in folder** selects the item in the Finder, and the default external editor is
-the default text editor (`open -t`) unless `FINDCRAFT_EDITOR` (or the setting) names another.
+the default text editor (`open -t`) unless `ANYTHING_EDITOR` (or the setting) names another.
 Folders that macOS privacy protection guards (such as Mail or Messages data) are only indexed when
-FindCraft has Full Disk Access; otherwise they count as items that could not be read. Fast NTFS
+Anything has Full Disk Access; otherwise they count as items that could not be read. Fast NTFS
 indexing, the quick search bar, the notification area icon and Properties are not shown.
 
 ## Window
@@ -56,7 +56,7 @@ are working on. It takes the same search syntax as the main window, and shows th
 results: names that match what you typed most closely come first, and programs and shortcuts before
 other files. It always searches with the default options (not the **Search** menu's), and
 `Shift+Enter` switches the main window to those options too, so it shows the same results. That
-lasts until FindCraft restarts: your own options are still the ones remembered, unless you change
+lasts until Anything restarts: your own options are still the ones remembered, unless you change
 an option yourself in the meantime.
 
 | Key | Action |
@@ -76,34 +76,34 @@ click, `Ctrl+Enter` and `Ctrl+Shift+C` do nothing until the results for what you
 arrived, so they never act on an older result; try again once the footer shows the results. When
 the query is invalid, the old rows are cleared and the footer shows the error.
 
-While quick search is on, FindCraft keeps running in the notification area: closing the window only
-hides it, and the indexes stay in memory. Click the icon or start FindCraft again to bring the
+While quick search is on, Anything keeps running in the notification area: closing the window only
+hides it, and the indexes stay in memory. Click the icon or start Anything again to bring the
 window back, and right-click the icon or use **File → Exit** to quit. The first time you close the
-window, FindCraft says this once and offers to exit instead.
-FindCraft does not start with Windows by itself, so the hotkey works once you have started it.
+window, Anything says this once and offers to exit instead.
+Anything does not start with Windows by itself, so the hotkey works once you have started it.
 
 Change the hotkey or turn all this off in **Settings**. If another program already uses the hotkey,
 Settings says so.
 
 ## Indexing
 
-On start, each drive's index is loaded from the cache in `%LOCALAPPDATA%\FindCraft\index`,
+On start, each drive's index is loaded from the cache in `%LOCALAPPDATA%\Anything\index`,
 so the window is searchable in about a second. A drive is then re-indexed in the background when
 its cache is older than the configured age (default 60 minutes); **File → Re-index all drives**
 (F5) forces it. Results stay searchable while re-indexing runs.
 
 | Mode | When | Speed |
 | --- | --- | --- |
-| **NTFS MFT** | Fast NTFS indexing is on (or FindCraft runs as administrator), NTFS drive | Reads the master file table directly: seconds per drive |
+| **NTFS MFT** | Fast NTFS indexing is on (or Anything runs as administrator), NTFS drive | Reads the master file table directly: seconds per drive |
 | **Folder scan** | Otherwise (or if the MFT read fails) | Parallel directory walk: ~20 s for 4 million files on an SSD, longer on hard disks |
 
 Click **⚡ Fast NTFS indexing** in the status bar (or **File → Fast NTFS indexing**) to turn it
 on. Windows asks once for administrator rights, for a small helper that only reads the master
-file tables and hands the results to FindCraft. FindCraft itself keeps running without
+file tables and hands the results to Anything. Anything itself keeps running without
 administrator rights, so opening files, editing and the external editor never run elevated. The
-helper ends when FindCraft closes. A folder scan cannot see into folders your account cannot open; the MFT read sees
+helper ends when Anything closes. A folder scan cannot see into folders your account cannot open; the MFT read sees
 everything on the volume. A heavily fragmented master file table is read in full too; if its
-layout cannot be read consistently, FindCraft uses the folder scan instead of a partial index.
+layout cannot be read consistently, Anything uses the folder scan instead of a partial index.
 
 The index does not follow changes live: files created or deleted after the last index appear on
 the next re-index.
@@ -154,20 +154,20 @@ first frame.
   and what Overwrite does: replace the other changes, write into the file that replaced yours,
   or create a deleted file again.
 - Saving writes into the existing file, so its permissions, attributes and hard links are kept.
-  A copy of the original is kept in `%LOCALAPPDATA%\FindCraft\backup` until the write finishes;
+  A copy of the original is kept in `%LOCALAPPDATA%\Anything\backup` until the write finishes;
   if a save fails and the original cannot be restored, the error names that copy. Copies older
-  than 7 days are deleted when FindCraft starts, so recover one before then.
+  than 7 days are deleted when Anything starts, so recover one before then.
 - Saving fails with "being used by another process" while another program has the file open
   for writing.
 - Switching to another result or closing the window with unsaved changes asks whether to save.
 - **External editor** (Ctrl+E) opens the file in the editor set in **Settings** (default: the
-  `FINDCRAFT_EDITOR`, `VISUAL` or `EDITOR` environment variable, else Notepad). For VS Code use `code`.
-  When FindCraft runs as administrator the editor would too, so the first launch of each editor
+  `ANYTHING_EDITOR`, `VISUAL` or `EDITOR` environment variable, else Notepad). For VS Code use `code`.
+  When Anything runs as administrator the editor would too, so the first launch of each editor
   command in a session shows the command and its program and asks before running it. Confirming
-  runs exactly the program shown; if the command later resolves to a different program, FindCraft
+  runs exactly the program shown; if the command later resolves to a different program, Anything
   asks again.
-- FindCraft refuses to save its cache or a backup copy when its data folder
-  (`%LOCALAPPDATA%\FindCraft`, `index` or `backup`) is a junction or symbolic link, so those
+- Anything refuses to save its cache or a backup copy when its data folder
+  (`%LOCALAPPDATA%\Anything`, `index` or `backup`) is a junction or symbolic link, so those
   writes cannot be redirected to another folder; it does not create a missing folder through one
   either.
 
@@ -197,7 +197,7 @@ while the search box or the preview text has focus. In the inline editor and the
 there and in the preview text, moving to the next control.
 
 Windows rewrites some names when a program opens them: a trailing dot or space is dropped, and
-`CON`, `NUL`, `CONIN$`, `COM1`, `COM¹` and similar are devices. FindCraft previews and edits such
+`CON`, `NUL`, `CONIN$`, `COM1`, `COM¹` and similar are devices. Anything previews and edits such
 items themselves. It refuses to open them, show them in Explorer, show their properties or pass
 them to the external editor, since those would act on a different item.
 
@@ -220,6 +220,6 @@ them to the external editor, since those would act on a different item.
   work without Ctrl, Alt or Win; Shift alone does not count, since the hotkey would take capital
   letters away from every other program. A new hotkey takes effect when you leave the field or
   close Settings; if what you typed is not a hotkey, closing Settings goes back to the one in
-  effect. Turned off, closing the window exits FindCraft.
+  effect. Turned off, closing the window exits Anything.
 
 Settings, the window size, sort order and search options are remembered between sessions.

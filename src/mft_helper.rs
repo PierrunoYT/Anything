@@ -4,7 +4,7 @@
 //! them: elevated, every action it takes (opening files, running the editor, writing caches and
 //! backups) would run as administrator on state that unelevated programs of the same user can
 //! change. So the window stays unelevated, and "fast NTFS indexing" starts this small helper
-//! elevated instead (`FindCraft.exe --mft-helper <pipe>`, one UAC prompt).
+//! elevated instead (`Anything.exe --mft-helper <pipe>`, one UAC prompt).
 //!
 //! The helper only reads volumes. It connects to a named pipe the window created, answers
 //! "index drive X" requests with progress and the index in the cache format, and exits when the
@@ -30,7 +30,7 @@ use std::time::{Duration, Instant};
 
 /// Command-line switch that runs the helper instead of the window.
 pub const HELPER_ARG: &str = "--mft-helper";
-const PIPE_PREFIX: &str = r"\\.\pipe\findcraft-mft-";
+const PIPE_PREFIX: &str = r"\\.\pipe\anything-mft-";
 const MAX_ERROR_BYTES: u32 = 64 * 1024;
 /// Same bound as a cache file.
 const MAX_INDEX_BYTES: u64 = 4 << 30;
@@ -364,7 +364,7 @@ impl MftHelper {
 
 // ─── The helper's side ──────────────────────────────────────────────────────
 
-/// Entry point of `FindCraft.exe --mft-helper <pipe>`; returns the process exit code.
+/// Entry point of `Anything.exe --mft-helper <pipe>`; returns the process exit code.
 pub fn run_helper(pipe: &std::ffi::OsStr) -> i32 {
     let Some(name) = pipe.to_str().filter(|n| valid_pipe_name(n)) else { return 2 };
     let Ok(mut conn) = open_client(name) else { return 3 };
@@ -374,7 +374,7 @@ pub fn run_helper(pipe: &std::ffi::OsStr) -> i32 {
     }
 }
 
-/// Only pipes FindCraft creates: `\\.\pipe\findcraft-mft-<pid>-<hex>`.
+/// Only pipes Anything creates: `\\.\pipe\anything-mft-<pid>-<hex>`.
 fn valid_pipe_name(name: &str) -> bool {
     name.strip_prefix(PIPE_PREFIX)
         .is_some_and(|rest| !rest.is_empty() && rest.len() <= 40 && rest.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-'))
@@ -807,7 +807,7 @@ mod tests {
     }
 
     /// A second server under the same name is refused, so no other program can stand in for
-    /// the window; and the helper only accepts FindCraft's own pipe names.
+    /// the window; and the helper only accepts Anything's own pipe names.
     #[test]
     fn pipes_cannot_be_hijacked() {
         let name = pipe_name("b2");

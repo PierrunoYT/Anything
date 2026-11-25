@@ -24,7 +24,7 @@ fn main() -> eframe::Result {
         std::process::exit(mft_helper::run_helper(&pipe));
     }
 
-    // Closing the window keeps FindCraft running in the notification area, so starting the same
+    // Closing the window keeps Anything running in the notification area, so starting the same
     // executable again means "show me the window".
     if hotkey::activate_running_instance() {
         return Ok(());
@@ -32,7 +32,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("FindCraft")
+            .with_title("Anything")
             .with_inner_size([1200.0, 760.0])
             .with_min_inner_size([640.0, 400.0])
             .with_icon(app_icon()),
@@ -40,12 +40,12 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     let result = eframe::run_native(
-        "FindCraft",
+        "Anything",
         options,
         Box::new(|cc| {
             #[cfg(windows)]
             set_taskbar_icon(cc);
-            Ok(Box::new(app::FindCraftApp::new(cc)))
+            Ok(Box::new(app::AnythingApp::new(cc)))
         }),
     );
     // The window has gone, so waiting for the tray icon to be removed freezes nothing.

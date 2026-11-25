@@ -173,6 +173,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "anything"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossbeam-channel",
+ "eframe",
+ "egui",
+ "egui_extras",
+ "globset",
+ "image",
+ "libc",
+ "memchr",
+ "raw-window-handle",
+ "regex",
+ "windows-sys 0.61.2",
+ "winresource",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -964,25 +983,6 @@ name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
-
-[[package]]
-name = "findcraft"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossbeam-channel",
- "eframe",
- "egui",
- "egui_extras",
- "globset",
- "image",
- "libc",
- "memchr",
- "raw-window-handle",
- "regex",
- "windows-sys 0.61.2",
- "winresource",
-]
 
 [[package]]
 name = "flate2"

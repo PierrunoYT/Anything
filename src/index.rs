@@ -579,16 +579,16 @@ const MAX_CACHE_ENTRIES: usize = 64 << 20;
 /// Serialized size of one [`Entry`].
 const ENTRY_BYTES: usize = 36;
 
-/// `%LOCALAPPDATA%\FindCraft` on Windows, `~/Library/Caches/FindCraft` on macOS, elsewhere
-/// `$XDG_CACHE_HOME/findcraft`, by default `~/.cache/findcraft`, rather than the shared temporary
+/// `%LOCALAPPDATA%\Anything` on Windows, `~/Library/Caches/Anything` on macOS, elsewhere
+/// `$XDG_CACHE_HOME/anything`, by default `~/.cache/anything`, rather than the shared temporary
 /// folder other users can write to.
 pub fn data_dir() -> PathBuf {
     #[cfg(windows)]
-    let (base, name) = (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "FindCraft");
+    let (base, name) = (std::env::var_os("LOCALAPPDATA").map(PathBuf::from), "Anything");
     #[cfg(target_os = "macos")]
     let (base, name) = (
         std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library").join("Caches")),
-        "FindCraft",
+        "Anything",
     );
     #[cfg(not(any(windows, target_os = "macos")))]
     let (base, name) = (
@@ -596,7 +596,7 @@ pub fn data_dir() -> PathBuf {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache"))),
-        "findcraft",
+        "anything",
     );
     base.unwrap_or_else(std::env::temp_dir).join(name)
 }
@@ -614,7 +614,7 @@ pub fn ensure_own_dir(dir: &Path) -> io::Result<()> {
 /// through a link (creating `dir` first made its missing folders inside the link's target).
 fn ensure_own_dir_in(dir: &Path, base: &Path) -> io::Result<()> {
     let chain: Vec<&Path> = std::iter::once(dir).chain(dir.ancestors().skip(1).take_while(|d| d.starts_with(base))).collect();
-    // The folders above the checked ones (such as `%LOCALAPPDATA%`) are not FindCraft's.
+    // The folders above the checked ones (such as `%LOCALAPPDATA%`) are not Anything's.
     if let Some(above) = chain.last().and_then(|d| d.parent()) {
         fs::create_dir_all(above)?;
     }
@@ -633,7 +633,7 @@ fn ensure_own_dir_in(dir: &Path, base: &Path) -> io::Result<()> {
         };
         if is_reparse_point(&meta) {
             return Err(io::Error::other(format!(
-                "{} is a link or junction; FindCraft does not write through it",
+                "{} is a link or junction; Anything does not write through it",
                 d.display()
             )));
         }
@@ -940,7 +940,7 @@ fn remove_stale_staging(dir: &Path, stem: &str) {
     }
 }
 
-/// Build time (seconds since 1970) recorded in the cache at `path`, if it is a FindCraft cache.
+/// Build time (seconds since 1970) recorded in the cache at `path`, if it is an Anything cache.
 /// A stamp further ahead of the clock than [`CLOCK_SKEW_SECS`] is not a newer snapshot (clock
 /// skew or corruption), so it is reported as absent and cannot block the save (FC-11).
 fn cached_build_secs(path: &Path) -> Option<u64> {
@@ -1164,7 +1164,7 @@ pub mod tests {
     #[test]
     fn cache_round_trip() {
         let v = sample();
-        let path = std::env::temp_dir().join(format!("findcraft-test-{}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("anything-test-{}.idx", std::process::id()));
         v.save(&path).unwrap();
         let loaded = VolumeIndex::load(&path, 'C').unwrap();
         let _ = fs::remove_file(&path);
@@ -1179,7 +1179,7 @@ pub mod tests {
         // Tests run in parallel, so every call gets its own file.
         static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("findcraft-test-bytes-{}-{n}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("anything-test-bytes-{}-{n}.idx", std::process::id()));
         v.save(&path).unwrap();
         let bytes = fs::read(&path).unwrap();
         let _ = fs::remove_file(&path);
@@ -1188,7 +1188,7 @@ pub mod tests {
 
     /// Loads `bytes` as a cache of drive `letter` and returns the error it must produce.
     fn load_error(label: &str, bytes: &[u8], letter: char) -> io::Error {
-        let path = std::env::temp_dir().join(format!("findcraft-test-{label}-{}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("anything-test-{label}-{}.idx", std::process::id()));
         fs::write(&path, bytes).unwrap();
         let result = VolumeIndex::load(&path, letter);
         let _ = fs::remove_file(&path);
@@ -1230,7 +1230,7 @@ pub mod tests {
         let dir = cache_dir("junction-base");
         let target = dir.join("target");
         fs::create_dir_all(&target).unwrap();
-        let base = dir.join("FindCraft");
+        let base = dir.join("Anything");
         junction(&base, &target);
 
         let err = ensure_own_dir_in(&base.join("index"), &base).unwrap_err();
@@ -1244,7 +1244,7 @@ pub mod tests {
     #[test]
     fn missing_data_folders_are_created() {
         let dir = cache_dir("data-folders");
-        let base = dir.join("FindCraft");
+        let base = dir.join("Anything");
         ensure_own_dir_in(&base.join("index"), &base).unwrap();
         assert!(base.join("index").is_dir());
         ensure_own_dir_in(&base.join("index"), &base).unwrap();
@@ -1390,7 +1390,7 @@ pub mod tests {
         assert_eq!(v.entry(0).size, 7, "folder sizes reach the root");
         assert_eq!(v.by_path, (1..=file).collect::<Vec<_>>());
 
-        let path = std::env::temp_dir().join(format!("findcraft-test-deep-{}.idx", std::process::id()));
+        let path = std::env::temp_dir().join(format!("anything-test-deep-{}.idx", std::process::id()));
         v.save(&path).unwrap();
         let loaded = VolumeIndex::load(&path, 'C');
         let _ = fs::remove_file(&path);
@@ -1425,7 +1425,7 @@ pub mod tests {
     }
 
     fn cache_dir(label: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("findcraft-test-{label}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("anything-test-{label}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

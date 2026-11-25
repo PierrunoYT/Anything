@@ -1,6 +1,6 @@
-<p align="center"><img src="assets/logos/logo.png" alt="FindCraft logo: an orange folder with a magnifying glass" width="160"></p>
+<p align="center"><img src="assets/logos/logo.png" alt="Anything logo: an orange folder with a magnifying glass" width="160"></p>
 
-<h1 align="center">FindCraft</h1>
+<h1 align="center">Anything</h1>
 
 <p align="center"><strong>Find any file on your computer as fast as you can type.</strong></p>
 
@@ -17,20 +17,20 @@
   <a href="#development">Development</a>
 </p>
 
-FindCraft is a free, open-source file search app for Windows, Linux and macOS, in the spirit of
+Anything is a free, open-source file search app for Windows, Linux and macOS, in the spirit of
 [Everything](https://www.voidtools.com/) and written in Rust. It indexes every file and folder on
 your drives once, keeps the index cached, and filters millions of entries on every keystroke.
 
-FindCraft is one of the open-source desktop apps from [Pierruno](https://pierruno.dev/).
+Anything is one of the open-source desktop apps from [Pierruno](https://pierruno.dev/).
 
-<p align="center"><img src="docs/media/findcraft-hero.png" alt="FindCraft main window showing search results"></p>
+<p align="center"><img src="docs/media/anything-hero.png" alt="Anything main window showing search results"></p>
 
 ## Features
 
 - **All drives, one search box.** Results sort by name, path, size or date.
 - **Fast NTFS indexing (Windows).** Turn on **⚡ Fast NTFS indexing** and a small elevated helper
   reads each drive's master file table directly, indexing a drive in seconds. The main window never
-  needs administrator rights; without the helper, FindCraft uses a parallel folder scan.
+  needs administrator rights; without the helper, Anything uses a parallel folder scan.
 - **Instant startup.** Indexes are cached on disk and refreshed in the background.
 - **Everything-style queries.** Combine filters, wildcards and operators:
 
@@ -48,7 +48,7 @@ FindCraft is one of the open-source desktop apps from [Pierruno](https://pierrun
   line endings); images, hex dumps and folder listings preview too.
 - **Shell actions.** Open, show in folder, Properties, copy path, open in an external editor.
 - **Quick search bar (Windows).** Press **Alt+Space** anywhere for a launcher-style search box that
-  ranks programs and close matches first. FindCraft keeps running in the notification area when
+  ranks programs and close matches first. Anything keeps running in the notification area when
   its window is closed.
 
 ## Platforms
@@ -81,7 +81,7 @@ You need a recent stable [Rust toolchain](https://rustup.rs/).
 
 ```powershell
 cargo build --release
-.\target\release\FindCraft.exe
+.\target\release\Anything.exe
 ```
 
 Click **⚡ Fast NTFS indexing** in the status bar to switch to MFT indexing (one UAC prompt for the
@@ -92,7 +92,7 @@ helper).
 
 ```sh
 cargo build --release
-./target/release/FindCraft
+./target/release/Anything
 ```
 
 ## Documentation
@@ -117,7 +117,7 @@ cargo deny check
 To benchmark against a real drive:
 
 ```powershell
-$env:FINDCRAFT_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ignored --nocapture
+$env:ANYTHING_BENCH_ROOT = "D:\"; cargo test --release bench_real_drive -- --ignored --nocapture
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds, lints and tests on Windows (debug
@@ -128,5 +128,5 @@ pushes. Third-party actions are pinned to commit SHAs; Dependabot keeps them and
 
 ## License
 
-FindCraft is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE).
+Anything is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE).
 It comes with no warranty; see [LICENSE](LICENSE) for details.

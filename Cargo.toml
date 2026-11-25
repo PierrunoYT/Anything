@@ -1,5 +1,5 @@
 [package]
-name = "findcraft"
+name = "anything"
 version = "0.1.0"
 edition = "2024"
 description = "Instant file search for Windows, Linux and macOS: an Everything-style desktop app, with NTFS MFT indexing on Windows"
@@ -8,7 +8,7 @@ categories = ["filesystem", "gui"]
 license = "GPL-3.0-or-later"
 
 [[bin]]
-name = "FindCraft"
+name = "Anything"
 path = "src/main.rs"
 
 [dependencies]

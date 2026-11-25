@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 /// The title identifies the window to `hotkey::platform`, which shows and hides it.
-pub const TITLE: &str = "FindCraft Quick Search";
+pub const TITLE: &str = "Anything Quick Search";
 
 const WIDTH: f32 = 640.0;
 const INPUT_HEIGHT: f32 = 52.0;
@@ -183,7 +183,7 @@ pub struct QuickBar {
     take_foreground: bool,
     /// The window has had the focus since it opened. Until then it not being focused says nothing.
     was_focused: bool,
-    /// Where "show in FindCraft" sends the query.
+    /// Where "show in Anything" sends the query.
     to_main: Sender<String>,
     /// Where Open and Show in folder report failures that come after the bar closed: the main
     /// window's status bar.

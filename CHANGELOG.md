@@ -8,7 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- FindCraft: a Windows desktop app (egui) modelled on Everything, with one search box over
+- Anything: a Windows desktop app (egui) modelled on Everything, with one search box over
   every fixed drive.
 - App icon (an orange folder with a magnifying glass), embedded in the exe and shown in the window and taskbar.
 - Hero screenshot in `docs/media/`.
@@ -16,7 +16,7 @@ All notable changes to this project are documented here. The format follows
 - NTFS master file table indexing, with a parallel folder scan as the fallback. **⚡ Fast NTFS
   indexing** starts a small elevated helper (one UAC prompt) that reads the master file tables for
   the window, which keeps running without administrator rights (FC-18).
-- Per-drive index cache in `%LOCALAPPDATA%\FindCraft\index`, loaded at startup and refreshed
+- Per-drive index cache in `%LOCALAPPDATA%\Anything\index`, loaded at startup and refreshed
   in the background when older than a configurable age (default 60 minutes); F5 re-indexes.
 - Everything-style query language: AND terms, `"phrases"`, `!negation`, `a|b`, wildcards, path
   terms, `ext:`, `file:`, `folder:`, `size:`, `dm:`, `regex:` and `path:`, plus Match case,
@@ -25,11 +25,11 @@ All notable changes to this project are documented here. The format follows
   precomputed sort orders, parallel filtering and a cross-drive merge.
 - Preview pane for text, images, binary (hex) and folders, with an inline editor that keeps the
   BOM and CRLF line endings, detects changes made on disk, and asks before discarding edits.
-- Open, Show in folder, Properties, Copy path and name, and External editor (`FINDCRAFT_EDITOR`,
+- Open, Show in folder, Properties, Copy path and name, and External editor (`ANYTHING_EDITOR`,
   `VISUAL` or `EDITOR`, else Notepad) from the context menu, preview pane and keyboard shortcuts.
 - Settings for the editor command, which drives to index and cache age; window size, sort and
   search options persist between sessions.
-- User guide, architecture notes and an opt-in benchmark (`FINDCRAFT_BENCH_ROOT`).
+- User guide, architecture notes and an opt-in benchmark (`ANYTHING_BENCH_ROOT`).
 - CI on Windows (check, `clippy -D warnings`, tests) plus `cargo deny` and `cargo audit`. The
   dependency policy in `deny.toml` checks the Windows graph, keeps advisory checks on, allows
   only reviewed licenses and crates.io sources. A lint policy in `Cargo.toml` requires
@@ -41,19 +41,19 @@ All notable changes to this project are documented here. The format follows
   always-on-top search box that ranks programs and close name matches first. Enter opens the
   result, Ctrl+Enter shows it in its folder, Shift+Enter shows all results in the main window.
 - Notification area icon while quick search is on: clicking it shows the window, and its menu
-  offers Open FindCraft, Quick search and Exit. Starting FindCraft again shows the running instance.
-- Linux support. FindCraft used to find no drives on Linux, so nothing was indexed and every search
+  offers Open Anything, Quick search and Exit. Starting Anything again shows the running instance.
+- Linux support. Anything used to find no drives on Linux, so nothing was indexed and every search
   came back empty. It now indexes the file system root `/` with the folder scan, including the
   file systems mounted below it but not `/proc`, `/sys`, `/dev` and `/run`. Paths use `/`, and
-  `\` and `:` are ordinary characters of names. The cache lives in `$XDG_CACHE_HOME/findcraft`
-  (by default `~/.cache/findcraft`). The external editor defaults to `FINDCRAFT_EDITOR`, else
+  `\` and `:` are ordinary characters of names. The cache lives in `$XDG_CACHE_HOME/anything`
+  (by default `~/.cache/anything`). The external editor defaults to `ANYTHING_EDITOR`, else
   `xdg-open`. Fast NTFS indexing, quick search and Properties are Windows-only and hidden there.
   CI also checks, lints and tests on Linux.
 - macOS support. As on Linux, the one volume is `/`, indexed with the folder scan. The scan does
   not enter `/System/Volumes`, whose data volume already appears at `/` through firmlinks (it
-  would list every user file twice), or `/dev`. The cache lives in `~/Library/Caches/FindCraft`.
+  would list every user file twice), or `/dev`. The cache lives in `~/Library/Caches/Anything`.
   Open uses `open`, Show in folder selects the item in the Finder (`open -R`), and the external
-  editor defaults to `FINDCRAFT_EDITOR`, else the default text editor (`open -t`). `windows-sys`
+  editor defaults to `ANYTHING_EDITOR`, else the default text editor (`open -t`). `windows-sys`
   is now a Windows-only dependency. CI also checks, lints and tests on macOS.
 - The package and GitHub repository descriptions name Windows, Linux and macOS, and the repository
   has the topics `linux`, `macos`, `cross-platform`, `egui` and `everything`. The package has
@@ -61,25 +61,25 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
-- The app is renamed FindCraft (it was FileCraft): the exe, window title, cache folder
-  (%LOCALAPPDATA%\FindCraft, ~/Library/Caches/FindCraft, ~/.cache/findcraft), settings, the
-  FINDCRAFT_EDITOR and FINDCRAFT_BENCH_ROOT variables and the repository. Indexes and settings
-  from FileCraft are not carried over; the first start rebuilds them.
-- FindCraft is licensed under the GNU General Public License v3.0 or later (it was MIT). The
+- The app is renamed Anything (it was FindCraft, and FileCraft before that): the exe, window
+  title, cache folder (%LOCALAPPDATA%\Anything, ~/Library/Caches/Anything, ~/.cache/anything),
+  settings, the ANYTHING_EDITOR and ANYTHING_BENCH_ROOT variables and the hero image. Indexes and
+  settings from FindCraft are not carried over; the first start rebuilds them.
+- Anything is licensed under the GNU General Public License v3.0 or later (it was MIT). The
   `LICENSE` file, the package's `license` field and the README's License section say so.
 - Changes are pushed straight to `main` instead of going through pull requests. The branch rule
   that required a pull request is removed (force pushes and deleting `main` stay blocked), and
   `AGENTS.md` and the README's Development section say so.
 - README: removed the Freewright and Discord links, and links to [pierruno.dev](https://pierruno.dev/).
 - README and user guide: the reveal action is called "Show in folder", matching the app.
-- The hero image shows the FindCraft name and says it runs on Windows, Linux and macOS; it was
+- The hero image shows the Anything name and says it runs on Windows, Linux and macOS; it was
   still the "Pounce" render.
-- Only the rendered hero image (`docs/media/findcraft-hero.png`) is in the repository; its HTML
+- Only the rendered hero image (`docs/media/anything-hero.png`) is in the repository; its HTML
   source and renderer in `promo/` are kept local.
 - README: rewritten with a screenshot, a query example table, a per-platform feature table and
   separate Build and Development sections.
 - `AGENTS.md` now uses the same short guidelines as ConvertCraft.
-- With quick search on (the default), closing the window no longer exits FindCraft: it keeps
+- With quick search on (the default), closing the window no longer exits Anything: it keeps
   running in the notification area so that the hotkey keeps working. **Exit** (in the File menu or
   the icon's menu) quits, and turning quick search off in Settings restores the old behaviour. The
   first close explains this once and offers to exit instead.
@@ -104,7 +104,7 @@ All notable changes to this project are documented here. The format follows
   is now found again in the latest results, and nothing is selected if it is gone.
 - Pressing F2 (or View > Preview pane) while editing a file in the preview pane hid the pane, and
   Save and Discard with it. The pane now stays while an edit is open.
-- Closing FindCraft while its window was hidden in the notification area and an inline edit had
+- Closing Anything while its window was hidden in the notification area and an inline edit had
   unsaved changes left it running with no way to answer: the question about the changes waited for
   a window that stayed hidden. The window now comes back to ask.
 - Opening a file in the external editor (Ctrl+E) froze the window while the editor was looked up
@@ -125,7 +125,7 @@ All notable changes to this project are documented here. The format follows
 - Fast NTFS indexing no longer gives a file the name or size of a deleted one: a leftover extension
   record of a deleted file was merged into whatever file reused its base record. Extension records
   now count only when their base reference's sequence number matches.
-- Fast NTFS indexing no longer aborts FindCraft when memory runs out while it stores the names and
+- Fast NTFS indexing no longer aborts Anything when memory runs out while it stores the names and
   hard links of a huge volume: only the record table was allocated with a fallback, the names
   and links grew without one. Running out of memory there now falls back to the folder scan too.
 - Fast NTFS indexing no longer loses records that lie in a sparse run of the master file table:
@@ -140,7 +140,7 @@ All notable changes to this project are documented here. The format follows
   search spinner kept turning. A crash while searching, merging or ranking now shows an error for
   that query, and the next query is searched as usual.
 - Showing the path of an entry more than 512 folders deep whose top folder was never filled in
-  (a slot left empty while building the index) crashed FindCraft. The path is now written from
+  (a slot left empty while building the index) crashed Anything. The path is now written from
   its topmost folder, as it already was for shallower entries.
 - On Linux and macOS the Date Modified column showed UTC times and `dm:today`, `dm:yesterday` and
   `dm:2026-01-15` started at UTC midnight, so both were off by the local UTC offset. Times now use
@@ -158,14 +158,14 @@ All notable changes to this project are documented here. The format follows
   open a different item for those; the main window already made this check on Windows only.
 - Turning quick search off no longer freezes the window for up to a second while the hotkey thread
   removes the tray icon. The thread is only asked to stop; turning quick search back on waits on
-  its own thread for the old hotkey to be freed, and FindCraft waits for the icon after its window
+  its own thread for the old hotkey to be freed, and Anything waits for the icon after its window
   has closed when it exits.
 - Turning quick search off or exiting after the hotkey thread had already stopped no longer sends
-  FindCraft's private stop message to the thread's old window handle, which Windows may by then
+  Anything's private stop message to the thread's old window handle, which Windows may by then
   have given to another program's window.
 - A lock poisoned by an earlier panic no longer brings down the quick search bar or the hotkey
   thread. Taking the bar's state or the next hotkey panicked again, and in the hotkey window's
-  procedure that panic crossed into Windows and aborted FindCraft. The lock is now taken anyway.
+  procedure that panic crossed into Windows and aborted Anything. The lock is now taken anyway.
 - Clicking a quick search result in the same frame as typing no longer opens a result of the
   previous query. Clicks now wait for the search of what was typed, as `Enter` already did.
 - Icons in the results, preview pane, sort arrows and status bar (🗀 🗋 ⚡ ⏶ ✔ …) rendered as empty
@@ -181,7 +181,7 @@ All notable changes to this project are documented here. The format follows
   file is checked and written through one handle, so the path cannot be swapped in between, and
   a copy of the original is kept until the write completes, so a failed save no longer leaves
   it truncated (FC-04).
-- A corrupt index cache with an out-of-range build timestamp no longer crashes FindCraft at
+- A corrupt index cache with an out-of-range build timestamp no longer crashes Anything at
   startup; it is ignored and rebuilt. Loading also rejects caches for another drive, files over
   4 GiB, invalid name ranges, parent loops, incomplete or duplicated sort orders and trailing
   data (FC-02).
@@ -214,7 +214,7 @@ All notable changes to this project are documented here. The format follows
   size and memory limits, show only their first frame, are scaled down to fit the pane, and their
   texture is freed with the preview. egui's whole-file image loaders are no longer installed (FC-08).
 - A malformed image that makes the decoder panic no longer stops previews. The panic ended the
-  preview thread, so no other item previewed again (and release builds closed FindCraft, losing
+  preview thread, so no other item previewed again (and release builds closed Anything, losing
   unsaved edits); now the pane shows "Cannot show image" for that file.
 - Selecting a cloud or archive placeholder that is recalled when it is opened (the
   "recall on open" attribute some sync and storage tiering providers use) no longer downloads it.
@@ -224,17 +224,17 @@ All notable changes to this project are documented here. The format follows
   editor. The editor lays out the whole file as one block of text on every keystroke, so a
   multi-megabyte file took seconds per change and hundreds of MB of memory. A save also no longer
   keeps a second full copy of the text while it runs.
-- Save backups in `%LOCALAPPDATA%\FindCraft\backup` no longer pile up forever. A copy kept after a
+- Save backups in `%LOCALAPPDATA%\Anything\backup` no longer pile up forever. A copy kept after a
   failed save, or one another program held open when the save tried to delete it, stayed there for
-  good; FindCraft now deletes copies older than 7 days when it starts. Like the other writes there,
+  good; Anything now deletes copies older than 7 days when it starts. Like the other writes there,
   the cleanup refuses to work through a junction or symbolic link.
 - Open, Show in folder and Properties no longer freeze the window. They ran on the UI thread, where
   looking up the program or building the properties dialog for an item on a slow network share or
-  a cloud placeholder could hang FindCraft for seconds. They now run in the background. Windows'
+  a cloud placeholder could hang Anything for seconds. They now run in the background. Windows'
   own dialogs, such as choosing a program for a file type without one, still appear, and other
   failures are reported in the status bar as before.
 - Opening a result or showing it in its folder from the quick search bar no longer freezes
-  FindCraft either. The bar closes at once and the shell works in the background; a failure that
+  Anything either. The bar closes at once and the shell works in the background; a failure that
   comes later is reported in the main window's status bar.
 - Small correctness fixes (MIN-02):
   - Dates such as `dm:2026-02-31` are rejected instead of rolling over into the next month.
@@ -260,13 +260,13 @@ All notable changes to this project are documented here. The format follows
   every superseded job. A cancelled job still asked the helper to read its drive once the pipe was
   free and only then dropped the result, so pressing F5 a few times kept the helper (and the
   spinner) busy for several complete reads. A job cancelled while it waits is no longer sent.
-- The elevated NTFS helper stops reading a drive as soon as FindCraft stops listening (closed or
+- The elevated NTFS helper stops reading a drive as soon as Anything stops listening (closed or
   gave up on the request). It used to read the whole master file table to the end first, so an
   elevated process kept loading the disk after the window had gone.
-- A hung NTFS helper no longer stalls indexing for the rest of the session. FindCraft waited for
+- A hung NTFS helper no longer stalls indexing for the rest of the session. Anything waited for
   its answer without a time limit, so a helper stuck on a failing disk kept that drive, and every
   NTFS drive queued behind it, indexing forever. The helper reports progress several times a
-  second while it reads; after two minutes without a word FindCraft stops using it, and the drive
+  second while it reads; after two minutes without a word Anything stops using it, and the drive
   falls back to the folder scan.
 - On NTFS volumes with clusters smaller than a master file table record (formatted with 512-byte
   clusters, for example), a record split across two fragments of the table no longer throws off
@@ -288,10 +288,10 @@ All notable changes to this project are documented here. The format follows
   reader ignored the sequence number NTFS adds to each parent reference, so such files showed up
   with wrong full paths. A parent reference must now match its record's sequence number, and
   entries whose parent does not are left out like other invalid ones.
-- A bug in the master file table reader no longer ends FindCraft or its NTFS helper. Release
+- A bug in the master file table reader no longer ends Anything or its NTFS helper. Release
   builds aborted the whole process on any panic, so the helper's "the NTFS reader panicked" reply
-  could never be sent, and FindCraft started as administrator closed instead of scanning folders.
-  Release builds now unwind: the helper reports the failure and keeps serving, and FindCraft
+  could never be sent, and Anything started as administrator closed instead of scanning folders.
+  Release builds now unwind: the helper reports the failure and keeps serving, and Anything
   reading the table itself falls back to the folder scan for that drive.
 - A panic in one drive's indexing job no longer takes the window down with it. The job held the
   shared drive-status lock while it failed, and the status bar's next read of that lock panicked
@@ -300,7 +300,7 @@ All notable changes to this project are documented here. The format follows
   mounted drives) a folder scan listed without entering. Their contents were left out with no
   sign, so a disk mounted into a folder without a drive letter was never indexed while the drive
   looked complete.
-- A fixed drive with an I/O fault no longer brings up a Windows error dialog before FindCraft's
+- A fixed drive with an I/O fault no longer brings up a Windows error dialog before Anything's
   window opens. Checking each drive's file system at startup could show a "drive not ready" style
   system message; the check now fails quietly and the drive shows without a file system.
 - Out-of-range numbers in queries, such as `size:9223372036854775807` or `dm:9223372036854775807y`,
@@ -353,7 +353,7 @@ All notable changes to this project are documented here. The format follows
   eight, about 320 MB on a 5-million-entry index). It keeps the last two, enough to flip a column
   between ascending and descending.
 - If the search thread has stopped (after a crash in it), a search now reports "Searching stopped
-  working. Restart FindCraft." instead of showing a spinner that never ends.
+  working. Restart Anything." instead of showing a spinner that never ends.
 - Hiding the preview pane (F2 or *View → Preview pane*) while typing in its editor no longer
   leaves the arrow keys, Enter, F4, Ctrl+E and the other result shortcuts switched off until the
   pane was shown again and the editor lost focus.
@@ -382,18 +382,18 @@ All notable changes to this project are documented here. The format follows
   replaced by a different file or deleted, and what Overwrite will do. Before, it said only
   "changed or was deleted", so Overwrite could write into a file that had replaced the original
   without saying so (MIN-04).
-- Starting FindCraft or turning quick search on no longer freezes the window while Explorer is
+- Starting Anything or turning quick search on no longer freezes the window while Explorer is
   slow to add the notification area icon, for example while the taskbar restarts. The background
   thread now reports that it has started before it adds the icon, instead of after.
-- When the quick search background thread ends unexpectedly while the window is hidden, FindCraft
+- When the quick search background thread ends unexpectedly while the window is hidden, Anything
   wakes up to bring the window back and say so. It used to depend on eframe happening to run the
   app's logic for a hidden window, so it could stay unreachable with no tray icon or hotkey.
 - The quick search bar hides its window through the message queue instead of with a synchronous
   call made while its state is locked. Had Windows run the bar's UI again during that call,
-  FindCraft would have hung waiting for its own lock.
+  Anything would have hung waiting for its own lock.
 - The quick search bar takes the keyboard focus once it is actually on screen. The hotkey thread
   used to make it the foreground window before the busy UI thread had shown it, so while
-  FindCraft was indexing or merging, keystrokes could go to an invisible window.
+  Anything was indexing or merging, keystrokes could go to an invisible window.
 - Pressing the quick search hotkey twice in quick succession closes the bar again. The hotkey
   decided by whether the window was already visible, which lags behind showing and hiding it, so
   a fast second press could open the bar again instead of closing it (and the other way round).
@@ -404,7 +404,7 @@ All notable changes to this project are documented here. The format follows
   each time; the icon is loaded as a shared resource.
 - Turning quick search off or exiting releases the hotkey explicitly, before removing the
   notification area icon. It was left to window teardown, after the icon, so if Explorer was slow
-  to respond, turning quick search back on could report the hotkey as taken by FindCraft itself.
+  to respond, turning quick search back on could report the hotkey as taken by Anything itself.
 - Leaving the hotkey field in Settings without changing the hotkey no longer registers it again.
   Each time the field lost focus the hotkey was briefly released and re-registered, so a press at
   that moment was lost. A hotkey that failed to register is still retried.
@@ -468,16 +468,16 @@ All notable changes to this project are documented here. The format follows
 - Another program of the same user can no longer keep the NTFS helper from connecting by
   reconnecting to its pipe in a loop: the helper gave up on a busy pipe after 10 seconds while
   the window waited 60. It now keeps trying for as long as the window waits.
-- When `%LOCALAPPDATA%\FindCraft` was a junction or symbolic link, saving the cache or a backup
+- When `%LOCALAPPDATA%\Anything` was a junction or symbolic link, saving the cache or a backup
   still created a missing `index` or `backup` folder inside the link's target before refusing
   the write. The data folders are now checked from the outermost down, and a missing one is only
   created once the folder above it passed, so nothing is created through a link.
-- Another program can no longer stop FindCraft from starting by creating a window with the class
-  name of FindCraft's hidden window: every start took it for a running FindCraft, asked it to show
-  itself and exited. A window now only counts if its process runs the same FindCraft executable.
+- Another program can no longer stop Anything from starting by creating a window with the class
+  name of Anything's hidden window: every start took it for a running Anything, asked it to show
+  itself and exited. A window now only counts if its process runs the same Anything executable.
 - Another program can no longer switch off the quick search hotkey and tray icon by posting one
-  message to FindCraft's hidden window, whose class name is fixed and easy to find. The private
-  stop message now has to carry a random value only FindCraft knows, and is ignored otherwise.
+  message to Anything's hidden window, whose class name is fixed and easy to find. The private
+  stop message now has to carry a random value only Anything knows, and is ignored otherwise.
 - External editor launches no longer go through `cmd /C`, so shell syntax in a file name (such as
   `a&calc&.txt` or `%VAR%`) can no longer run commands. The editor is resolved on `PATH` and
   started directly; `.cmd` shims such as VS Code's `code` still work. Quoted editor paths with
@@ -501,31 +501,31 @@ All notable changes to this project are documented here. The format follows
   user can change (FC-18):
   - It asks before running the external editor command, which comes from saved settings or the
     environment, and shows the program it resolves to. It asks once per command per session.
-  - Cache saves, the staging cleanup and save backups refuse to write when `%LOCALAPPDATA%\FindCraft`,
+  - Cache saves, the staging cleanup and save backups refuse to write when `%LOCALAPPDATA%\Anything`,
     `index` or `backup` is a junction or symbolic link, which could aim them at a protected folder.
 - The external editor is no longer looked up in the current folder. An empty or relative `PATH`
-  entry (`a;;b`, `.\bin`) made FindCraft look for the editor in whatever folder it was started
+  entry (`a;;b`, `.\bin`) made Anything look for the editor in whatever folder it was started
   from, so a program planted there could run instead, and the program it reported could differ
   from the one Windows then started. Such entries are skipped, a relative editor path is refused,
   and the editor is started by the full path it was resolved to.
-- When FindCraft runs as administrator, confirming the external editor now runs exactly the
+- When Anything runs as administrator, confirming the external editor now runs exactly the
   program the confirmation showed. Before, the command was looked up again by name after you
   confirmed it, so the program that ran was not bound to the one you had checked, and later
   launches of the same command were never checked again. A confirmed command that now resolves to
   another program is asked about again (FC-18).
 - Show in folder starts `explorer.exe` from the Windows folder. It ran a bare `explorer`, which
-  Windows looks up in FindCraft's own folder first, so an `explorer.exe` placed next to a portable
-  `FindCraft.exe` ran instead.
+  Windows looks up in Anything's own folder first, so an `explorer.exe` placed next to a portable
+  `Anything.exe` ran instead.
 - Fast NTFS indexing no longer runs the whole window as administrator (FC-18). **Run as admin**
-  restarted FindCraft elevated, so opening files, editing, saving, backups, cache writes and the
+  restarted Anything elevated, so opening files, editing, saving, backups, cache writes and the
   external editor all ran with administrator rights on state that unelevated programs can change.
   Now only a small helper runs elevated:
   - it reads master file tables and nothing else;
   - it is reached through a single-instance, local-only pipe and cannot be impersonated through it;
   - the window checks everything it sends like a cache file.
-  The safeguards above still apply when FindCraft itself is started as administrator.
+  The safeguards above still apply when Anything itself is started as administrator.
 - Another program of the same user can no longer pose as the NTFS helper. The pipe's name can be
-  listed and any unelevated program could open it first, and FindCraft trusted whichever program
+  listed and any unelevated program could open it first, and Anything trusted whichever program
   connected: it could feed in a made-up index (fake names offered for open, edit and delete, and
-  saved to the cache) and lock the real helper out. FindCraft now checks that the connected
+  saved to the cache) and lock the real helper out. Anything now checks that the connected
   process is the helper it started, disconnects anyone else and keeps waiting for the helper.
